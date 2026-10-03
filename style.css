@@ -227,6 +227,46 @@ kbd { background: var(--panel2); border: 1px solid var(--line); border-radius: 5
 .play-actions { flex: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 10px; background: #FFF6E3; border-top: 1px solid var(--line); }
 .play-actions .btn { min-height: 44px; padding: 8px 10px; font-size: 13px; }
 .play-actions .btn[hidden] { display: none; }
+
+/* Máy tính chủ: app đủ rộng để chạm, nội dung cuộn riêng và nút đóng luôn ở ngoài. */
+.modal-host { width: min(680px, 100%); }
+.modal-host .modal-body { min-height: 0; overflow-y: auto; }
+.host-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.host-toolbar > b { margin-left: auto; }
+.host-status { color: #137A70; background: #E1F6F2; border-radius: 10px; padding: 10px; }
+.host-apps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.host-app { display: flex; flex-direction: column; align-items: center; gap: 6px; min-height: 120px; padding: 12px 8px; border: 1px solid var(--line); border-radius: 14px; background: #FFFDF4; color: var(--text); cursor: pointer; font: inherit; }
+.host-app > span { font-size: 30px; }
+.host-app small { color: var(--muted); font-size: 11px; }
+.host-app:hover, .host-app:focus-visible { background: #E1F6F2; outline: 2px solid #1FA89A; }
+.host-news { border-bottom: 1px dashed var(--line); padding: 10px 0; }
+.host-news h3 { margin: 0 0 6px; }
+.host-news p { margin: 6px 0; }
+.host-reply { background: #E1F6F2; border-left: 3px solid #1FA89A; padding: 10px; margin: 0 0 16px; border-radius: 8px; }
+.host-reply-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.modal-host .btn { min-height: 44px; }
+.host-bets { display: grid; gap: 10px; }
+.host-bets > div { padding: 10px; background: #FFFDF4; border: 1px solid var(--line); border-radius: 10px; }
+.host-bets > div > div { display: flex; gap: 8px; margin-top: 8px; }
+.host-bets .btn { flex: 1; }
+.host-dice-result { text-align: center; padding: 12px; background: #FFFDF4; border-radius: 12px; margin-top: 14px; }
+.host-dice { display: flex; justify-content: center; gap: 10px; font-size: 48px; color: var(--text); }
+.host-bets input { display: block; width: 100%; min-width: 0; margin: 8px 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; font: inherit; background: #fff; }
+.host-ban { padding: 12px; margin: 12px 0; border: 2px solid #A83226; border-radius: 10px; background: #FFFDF4; }
+.host-ban .btn { min-height: 44px; }
+.modal-gambling .modal-actions .btn { min-height: 44px; }
+.dice-rolling span { display: inline-block; animation: dice-roll .22s linear infinite; }
+.dice-rolling span:nth-child(2) { animation-direction: reverse; }
+.dice-rolling span:nth-child(3) { animation-delay: -.1s; }
+@keyframes dice-roll { 0% { transform: rotate(0) translateY(0); } 50% { transform: rotate(180deg) translateY(-7px); } 100% { transform: rotate(360deg) translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .dice-rolling span { animation: none; } }
+.host-monitor { cursor: pointer; }
+.host-monitor:focus-visible { outline: 3px solid #1FA89A; }
+.modal.modal-host { display: flex; flex-direction: column; width: min(680px, 100%); overflow: hidden; }
+.modal-host .modal-title, .modal-host .modal-actions { flex: none; }
+.modal-host .modal-body { flex: 1; }
+.warm .modal-host .modal-actions { position: static; margin-top: 12px; padding: 10px 0 0; }
+@media (min-width: 600px) { .host-apps { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .play-actions .door-ctl { margin-left: auto; }
 #screen-play .play-actions #btn-catch-thief { background: #C0392B; color: #fff; border-color: #C0392B; }
 .door-ctl { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; align-self: center; }

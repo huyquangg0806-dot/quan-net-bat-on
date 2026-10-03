@@ -19,7 +19,8 @@ function setText(node, v) { if (node.textContent !== v) node.textContent = v; }
 const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 const esc = s => String(s).replace(/[&<>"']/g, ch => ESC[ch]);
 
-function money(n) {
+function money(n, exact = false) {
+  if (exact) return Math.round(n).toLocaleString('vi-VN') + 'đ';
   const sign = n < 0 ? '-' : '';
   n = Math.abs(Math.round(n));
   if (n >= 1e6) return sign + (n / 1e6).toLocaleString('vi-VN', { maximumFractionDigits: 2 }) + 'tr';
@@ -83,6 +84,8 @@ const machineRate = m => TIERS[machineTier(m)].rate + gearBonus(m);
 // ---------- Trạng thái ----------
 let S = null;      // dữ liệu lưu qua nhiều ngày
 let R = null;      // trạng thái trong một ngày mở cửa
+let atTitle = true;
+let titleWasPaused = false;
 let modal = null;
 let hold = null;
 let lastFrame = performance.now();
@@ -90,8 +93,8 @@ let lastFrame = performance.now();
 // ---------- Lưu game ----------
 const SAVE_KEY = 'quan-net-nho-v1';
 function saveGame() {
-  try { CloudSave.save(S); }
-  catch (e) { saveFailed(e); }
+  try { CloudSave.save(S); return true; }
+  catch (e) { saveFailed(e); return false; }
 }
 function loadGame() {
   try { const raw = localStorage.getItem(SAVE_KEY); return raw ? JSON.parse(raw) : null; }
@@ -106,6 +109,7 @@ function saveFailed(e) {
 }
 
 function newGame(shopName) {
+  R = null;
   S = {
     shopName, day: 1, money: C.START_MONEY, rating: 3,
     machines: [newMachine(), newMachine(), newMachine()],
@@ -152,6 +156,7 @@ function normalizeSave() {
   S.nightStrikes = S.nightStrikes || 0;       // số lần bị công an bắt mở quá giờ (chưa được xóa)
   S.nightStrikeDay = S.nightStrikeDay || 0;   // ngày vi phạm gần nhất
   S.suspendDay = S.suspendDay || 0;           // ngày bị đình chỉ, không được mở cửa
+  S.suspendReason = S.suspendReason === 'gambling' ? 'gambling' : 'night';
   S.hintSeen = S.hintSeen || {};   // số lần đã hiện gợi ý "Lần tới" cho từng sự việc
   S.regulars = S.regulars || [];   // sổ khách quen: danh tính cố định + ký ức về quán
   S.nextRegId = S.nextRegId || 1;
@@ -181,6 +186,382 @@ function normalizeSave() {
     for (const b of S.inv[k]) if (!Number.isFinite(b.unitCost) || b.unitCost < 0) b.unitCost = ITEMS[k].packCost / ITEMS[k].pack;
   }
   normalizeAccounts();
+  normalizeHost();
+}
+
+// ---------- Máy tính chủ: dữ liệu và giao dịch buổi sáng ----------
+const hostPlaying = () => !!(R && !R.over);
+const hostTrend = () => HOST_TRENDS[(S.day - 1) % HOST_TRENDS.length];
+const diceRounds = () => S.casino.day === S.day ? S.casino.rounds : [];
+let diceAnimating = false;
+function normalizeHost() {
+  S.nextReviewId = Number.isSafeInteger(S.nextReviewId) && S.nextReviewId > 0 ? S.nextReviewId : 1;
+  for (const rv of S.reviews) if (Number.isSafeInteger(rv.id)) S.nextReviewId = Math.max(S.nextReviewId, rv.id + 1);
+  const ids = new Set();
+  for (const rv of S.reviews) {
+    if (!Number.isSafeInteger(rv.id) || rv.id < 1 || ids.has(rv.id)) rv.id = S.nextReviewId++;
+    ids.add(rv.id);
+    S.nextReviewId = Math.max(S.nextReviewId, rv.id + 1);
+    // Review cũ chỉ có tên: không đoán ID vì khách khác có thể dùng lại tên đó.
+    if (rv.reply && !HOST_REPLIES[rv.reply.kind]) delete rv.reply;
+  }
+  for (const r of S.regulars) {
+    const p = r.replyPromise;
+    if (p && !MEMORY_TEXT[p.key] && p.key !== 'sick' && !(p.key === 'nogame' && GAMES[p.game])) delete r.replyPromise;
+  }
+  if (!S.casino || !Number.isInteger(S.casino.day) || !Array.isArray(S.casino.rounds)) S.casino = { day: S.day, rounds: [] };
+  S.casino.rounds = S.casino.rounds.filter(r => r && validDiceBet(r.bet)
+    && ['tai', 'xiu'].includes(r.side) && Array.isArray(r.dice) && r.dice.length === C.HOST_DICE_COUNT
+    && r.dice.every(d => Number.isInteger(d) && d >= 1 && d <= C.HOST_DICE_SIDES)).slice(-C.HOST_DICE_HISTORY);
+  for (const r of S.casino.rounds) {
+    r.total = r.dice.reduce((n, d) => n + d, 0);
+    r.won = r.side === (r.total <= C.HOST_DICE_SPLIT ? 'tai' : 'xiu');
+    r.payout = r.won ? r.bet * C.HOST_DICE_PAYOUT : 0;
+  }
+  const casino = S.casino;
+  casino.count = Number.isSafeInteger(casino.count) && casino.count >= casino.rounds.length ? casino.count : casino.rounds.length;
+  for (const key of ['wagered', 'paid']) {
+    if (!Number.isFinite(casino[key]) || casino[key] < 0) casino[key] = casino.rounds.reduce((n, r) => n + (key === 'paid' ? r.payout : r.bet), 0);
+  }
+  const g = S.gambling = { risk: 0, banned: false, organized: false, activityDay: 0, peakDay: S.day,
+    peak: Math.max(0, S.money), lastRaidDay: 0, lastCase: null, ...S.gambling };
+  g.risk = Number.isFinite(g.risk) ? clamp(g.risk, 0, C.HOST_GAMBLE_RISK_MAX) : 0;
+  g.banned = g.banned === true;
+  g.organized = g.organized === true;
+  for (const key of ['activityDay', 'peakDay', 'lastRaidDay']) if (!Number.isSafeInteger(g[key]) || g[key] < 0) g[key] = 0;
+  if (!Number.isFinite(g.peak) || g.peak < 0) g.peak = Math.max(0, S.money);
+  if (g.lastCase && (!Number.isFinite(g.lastCase.fine) || g.lastCase.fine < 0 || !Number.isSafeInteger(g.lastCase.day))) g.lastCase = null;
+}
+const validDiceBet = bet => Number.isSafeInteger(bet) && bet > 0 && Number.isSafeInteger(bet * C.HOST_DICE_PAYOUT);
+// Tiền và kết quả được ghi chung; lỗi ghi trên máy thì phục hồi giao dịch trong bộ nhớ.
+function hostTransaction(change) {
+  if (hostPlaying() || CloudSave.state().blocked || CloudSave.state().busy) return false;
+  const before = JSON.stringify(S);
+  change();
+  try { CloudSave.save(S); return true; }
+  catch (e) { S = JSON.parse(before); saveFailed(e); return false; }
+}
+function replyReview(id, kind) {
+  const rv = S.reviews.find(r => r.id === id), choice = HOST_REPLIES[kind];
+  if (!rv || rv.reply || !choice) return false;
+  return hostTransaction(() => {
+    const rec = regById(rv.regId);
+    const delta = kind === 'sassy' ? C.HOST_REPLY_SASSY
+      : kind === 'apology' && rv.stars <= 3 ? C.HOST_REPLY_APOLOGY
+      : kind === 'thanks' && rv.stars >= 4 ? C.HOST_REPLY_THANKS
+      : kind === 'explain' ? C.HOST_REPLY_EXPLAIN : 0;
+    rv.reply = { kind, day: S.day, delta: rec ? delta : 0 };
+    if (rec) {
+      rec.aff = clamp(rec.aff + delta, 0, 100);
+      const key = MEM_GROUP[rv.key] || (rv.key === 'sick' ? 'sick' : rv.key === 'nogame' && GAMES[rv.game] ? 'nogame' : null);
+      if (kind === 'apology' && rv.stars <= 3 && key && !rec.replyPromise) rec.replyPromise = { key, day: S.day, game: rv.game, reviewId: rv.id };
+    }
+  });
+}
+function settleReplyPromise(c, forcedStars) {
+  const rec = regById(c.regId), promise = rec?.replyPromise;
+  if (!promise || (c.lost && promise.key !== 'nogame')) return;
+  const failed = promise.key === 'nogame' ? c.lost && c.game === promise.game
+    : promise.key === 'sick' ? !!c.sick || c.ev.sick < 0
+    : Object.entries(c.ev).some(([key, value]) => MEM_GROUP[key] === promise.key && value < 0);
+  const fixed = promise.key !== 'nogame' || S.installed[promise.game];
+  const good = !c.lost && !failed && fixed && (forcedStars ? forcedStars * 20 - 10 : c.sat) >= C.HOST_PROMISE_SAT;
+  if (!failed && !good) return;
+  c.affBonus = (c.affBonus || 0) + (good ? C.HOST_PROMISE_GOOD : C.HOST_PROMISE_BAD);
+  delete rec.replyPromise;
+  const text = good ? `${c.name}: quán đã giữ lời sau khi xin lỗi.` : `${c.name}: lại gặp lỗi quán đã hứa sửa.`;
+  R.led.replyNotes.push(text);
+  log(`💬 ${text}`);
+}
+function rollDice(side, bet) {
+  if (!['tai', 'xiu'].includes(side) || !validDiceBet(bet) || diceAnimating
+    || S.money < bet || S.gambling.lastRaidDay === S.day || S.suspendDay === S.day
+    || !Number.isSafeInteger(S.money + bet)) return false;
+  return hostTransaction(() => {
+    if (S.casino.day !== S.day) S.casino = { day: S.day, rounds: [], count: 0, wagered: 0, paid: 0 };
+    gamblingPeak();
+    const dice = Array.from({ length: C.HOST_DICE_COUNT }, () => 1 + Math.floor(Math.random() * C.HOST_DICE_SIDES));
+    const total = dice.reduce((n, d) => n + d, 0);
+    const won = side === (total <= C.HOST_DICE_SPLIT ? 'tai' : 'xiu');
+    const payout = won ? bet * C.HOST_DICE_PAYOUT : 0;
+    S.money += payout - bet;
+    recordBook('leisureIn', payout);
+    recordBook('leisureOut', bet);
+    S.casino.rounds.push({ dice, total, side, bet, won, payout });
+    S.casino.rounds = S.casino.rounds.slice(-C.HOST_DICE_HISTORY);
+    S.casino.count++;
+    S.casino.wagered += bet;
+    S.casino.paid += payout;
+    addGamblingRisk(C.HOST_GAMBLE_RISK_ROUND, bet);
+    const rate = gamblingRaidRate();
+    if (rate > 0 && Math.random() < rate) catchGambling();
+  });
+}
+
+// ---------- Cờ bạc tiền game: nghi ngờ, khách và xử phạt ----------
+function gamblingPeak() {
+  const g = S.gambling;
+  if (g.peakDay !== S.day) { g.peakDay = S.day; g.peak = 0; }
+  g.peak = Math.max(g.peak, S.money, 0);
+}
+function addGamblingRisk(points, bet = 0) {
+  gamblingPeak();
+  const g = S.gambling, before = g.risk;
+  g.risk = Math.min(C.HOST_GAMBLE_RISK_MAX, g.risk + points + bet / C.HOST_GAMBLE_RISK_MONEY);
+  g.activityDay = S.day;
+  if (hostPlaying() && before < C.HOST_GAMBLE_WARN && g.risk >= C.HOST_GAMBLE_WARN) log('🚨 Giao dịch bất thường: khu phố đang chú ý chuyện cờ bạc ở quán.');
+}
+const gamblingRaidRate = () => S.gambling.lastRaidDay === S.day ? 0
+  : Math.min(C.HOST_GAMBLE_RAID_MAX, Math.max(0, S.gambling.risk - C.HOST_GAMBLE_WARN) * C.HOST_GAMBLE_RAID_RATE);
+function catchGambling() {
+  const g = S.gambling;
+  if (g.lastRaidDay === S.day) return null;
+  if (hostPlaying()) for (const pc of R.pcs) if (pc.cust?.gamble?.pending) settleCustomerGamble(pc.cust);
+  gamblingPeak();
+  const organized = g.organized;
+  const fine = Math.ceil(Math.max(organized ? C.HOST_GAMBLE_ORG_FINE : C.HOST_GAMBLE_FINE,
+    g.peak * (organized ? C.HOST_GAMBLE_ORG_RATE : C.HOST_GAMBLE_FINE_RATE)));
+  S.money -= fine;
+  recordBook('gambleFine', fine);
+  g.lastRaidDay = S.day;
+  g.lastCase = { day: S.day, fine, organized, peak: g.peak };
+  g.risk = 0;
+  g.organized = false;
+  if (organized) { S.suspendDay = S.day + 1; S.suspendReason = 'gambling'; }
+  if (hostPlaying()) {
+    R.led.gambleFine += fine;
+    R.led.gambleCase = g.lastCase;
+    for (const pc of R.pcs) if (pc.cust?.gamble) pc.cust.gamble.active = false;
+    log(`👮 Phát hiện cờ bạc mạng: phạt ${money(fine)}${organized ? ', đình chỉ quán ngày mai' : ''}.`);
+  }
+  return g.lastCase;
+}
+function gamblingCaseHTML(c) {
+  return `<p class="bad-text">👮 Ngày ${c.day}: phát hiện ${c.organized ? 'giới thiệu khách chơi cờ bạc mạng' : 'chủ quán chơi cờ bạc mạng'}. Đã trừ <b>${money(c.fine)}</b>, căn cứ tiền cao nhất ngày ${money(c.peak)}.</p>
+    <p>${c.organized ? 'Quán bị đình chỉ ngày kế tiếp, vẫn trả mặt bằng và lãi vay.' : 'Tài khoản bị khóa đến hết ngày này.'}</p>`;
+}
+function gamblingRaid() {
+  const c = catchGambling();
+  if (!c) return;
+  eventBreather();
+  closeModal();
+  const wasPaused = R.paused;
+  setPause(true);
+  SFX.play('police');
+  openModal({ title: '👮 Phát hiện cờ bạc mạng', cls: 'modal-police modal-gambling', dismissable: false,
+    body: gamblingCaseHTML(c), actions: [{ label: 'Chấp hành xử phạt', cls: 'primary', onClick: closeModal }],
+    onClose: () => { if (hostPlaying() && !wasPaused) setPause(false); } });
+}
+function setGamblingBan(banned) {
+  if (typeof banned !== 'boolean' || S.gambling.banned === banned || CloudSave.state().blocked || CloudSave.state().busy) return false;
+  const change = () => {
+    S.gambling.banned = banned;
+    if (hostPlaying()) {
+      if (banned) for (const pc of R.pcs) if (pc.cust?.gamble) pc.cust.gamble.active = false;
+      R.led.gambleNotes.push(banned ? 'Dán bảng cấm: chặn lượt cược mới, lượt đã cược giải quyết xong.' : 'Gỡ bảng cấm cờ bạc.');
+      log(banned ? '🚫 Đã dán bảng cấm cờ bạc; lịch sử vi phạm vẫn còn.' : '🎲 Đã gỡ bảng cấm cờ bạc.');
+    }
+  };
+  if (!hostPlaying()) return hostTransaction(change);
+  change();
+  return true;
+}
+function inviteGambling(i) {
+  const pc = R?.pcs[i], c = pc?.cust;
+  if (!hostPlaying() || !c || c.awaitingLoad || c.shifty || c.seg === 'hocsinh' || c.gambleInvited
+    || S.gambling.banned || S.gambling.lastRaidDay === S.day || R.closing
+    || CloudSave.state().blocked || CloudSave.state().busy) return false;
+  c.gambleInvited = true;
+  S.gambling.organized = true;
+  addGamblingRisk(C.HOST_GAMBLE_INVITE_RISK);
+  if (Math.random() >= C.HOST_GAMBLE_ACCEPT) {
+    hit(c, 'gamble', C.HOST_GAMBLE_LOSS_HIT, null, 'Không thích chủ quán rủ cờ bạc');
+    log(`🚫 ${c.name} từ chối: “Em vào chơi game, đừng rủ cái này!”`);
+    R.led.gambleNotes.push(`${c.name} từ chối lời giới thiệu.`);
+    return true;
+  }
+  const budget = pick(C.HOST_GAMBLE_BUDGETS);
+  c.gamble = { active: true, budget, rounds: 0, wait: 0, pending: null };
+  R.led.gambleInvites++;
+  startCustomerGamble(c);
+  log(`🎲 ${c.name} đồng ý; ngân sách riêng ${money(budget)}, tối đa ${C.HOST_GAMBLE_CUSTOMER_ROUNDS} lượt lần ghé này.`);
+  return true;
+}
+function startCustomerGamble(c) {
+  const g = c.gamble;
+  if (!g?.active || g.pending || S.gambling.banned || S.gambling.lastRaidDay === S.day
+    || g.rounds >= C.HOST_GAMBLE_CUSTOMER_ROUNDS || g.budget < 1) return;
+  const bet = Math.max(1, Math.floor(g.budget * C.HOST_GAMBLE_STAKE_RATE));
+  const dice = Array.from({ length: C.HOST_DICE_COUNT }, () => 1 + Math.floor(Math.random() * C.HOST_DICE_SIDES));
+  const total = dice.reduce((n, d) => n + d, 0), side = pick(['tai', 'xiu']);
+  g.budget -= bet;
+  g.rounds++;
+  g.pending = { bet, dice, side, won: side === (total <= C.HOST_DICE_SPLIT ? 'tai' : 'xiu'), left: C.HOST_DICE_ANIMATION_MS / 1000 };
+  addGamblingRisk(C.HOST_GAMBLE_CUSTOMER_RISK, bet);
+  R.led.gambleWagered += bet;
+}
+function settleCustomerGamble(c) {
+  const g = c.gamble, r = g?.pending;
+  if (!r) return;
+  g.pending = null;
+  g.last = { ...r };
+  let tip = 0;
+  if (r.won) {
+    g.budget += r.bet * C.HOST_DICE_PAYOUT;
+    if (Math.random() < C.HOST_GAMBLE_TIP_CHANCE) tip = Math.floor(r.bet * (C.HOST_DICE_PAYOUT - 1) * C.HOST_GAMBLE_TIP_RATE);
+    g.budget -= tip;
+    S.money += tip;
+    recordBook('gambleTips', tip);
+    R.led.gambleTips += tip;
+  } else hit(c, 'gamble', C.HOST_GAMBLE_LOSS_HIT, null, 'Thua cược sau khi chủ quán giới thiệu');
+  gamblingPeak();
+  const text = `${c.name}: ${r.dice.join(' + ')} · ${r.won ? 'thắng' : 'thua'} cược ${money(r.bet)}${tip ? `, thưởng chủ ${money(tip)}` : ''}.`;
+  R.led.gambleNotes.push(text);
+  log(`🎲 ${text}`);
+  g.wait = C.HOST_GAMBLE_INTERVAL;
+  if (g.rounds >= C.HOST_GAMBLE_CUSTOMER_ROUNDS || g.budget < 1) g.active = false;
+}
+function updateGambling(dt, gh) {
+  gamblingPeak();
+  for (const pc of R.pcs) {
+    const c = pc.cust, g = c?.gamble;
+    if (!g) continue;
+    if (g.pending) {
+      g.pending.left -= dt;
+      if (g.pending.left <= 0) settleCustomerGamble(c);
+    } else if (g.active && powered() && !pc.broken && !R.closing) {
+      g.wait -= gh;
+      if (g.wait <= 0) startCustomerGamble(c);
+    }
+  }
+  const rate = gamblingRaidRate();
+  if (rate > 0 && (!modal || modal.docked) && !hold && Math.random() < 1 - Math.exp(-rate * gh)) { gamblingRaid(); return true; }
+  return false;
+}
+
+// ---------- Máy tính chủ: desktop và các app ----------
+function hostNewsHTML() {
+  const hot = GAMES[S.hot], trend = hostTrend(), outage = S.outageNext;
+  const card = (title, text) => `<article class="host-news"><h3>${title}</h3><p>${text}</p></article>`;
+  return `<p class="host-status">🌐 Bản tin đã cập nhật · ngày ${dayText()} · tin trong thế giới game</p>`
+    + card('⚡ Điện lực thông báo', outage ? `Dự kiến cúp điện từ <b>${clockText(outage.from)} đến ${clockText(outage.to)}</b>. Kiểm tra UPS và máy phát trước khi mở cửa.`
+      : 'Chưa có lịch cúp điện được báo trước hôm nay. Sự cố bất chợt vẫn có thể xảy ra.')
+    + card('🌤️ Dự báo & lịch phố', todayHTML())
+    + card(`🔥 ${hot.icon} ${hot.name}`, S.installed[S.hot] ? 'Quán đã cài game hot hôm nay. Kiểm tra máy đủ hạng để đón khách.'
+      : `Quán chưa cài: giá <b>${money(hot.cost)}</b>, cần máy ${TIERS[hot.minTier].short}. Ghé tab Nâng máy để xem thư viện game.`)
+    + card(`💬 Trend: ${trend.title}`, esc(trend.text))
+    + card('🦹 Thông báo an ninh', S.day < C.THIEF_FROM_DAY ? `Từ ngày ${C.THIEF_FROM_DAY}, đề phòng người giả làm khách để gỡ linh kiện.`
+      : 'Khu phố đang tìm kẻ hay giả làm khách, nạp ít giờ rồi nhìn quanh máy. Đây là dấu hiệu để quan sát, chưa đủ kết luận một khách là trộm. Camera và khóa cáp giúp phòng mất đồ.');
+}
+function hostReviewsHTML() {
+  return `<p class="hint">Trả lời một lần mỗi đánh giá; sao cũ giữ nguyên. ${hostPlaying() ? 'Đang trong ca: chỉ đọc, sáng mai hãy trả lời.' : 'Xin lỗi rồi sửa đúng lỗi ở lần ghé sau mới được thêm thiện cảm.'}</p>`
+    + (S.reviews.length ? S.reviews.map(rv => {
+      const rec = regById(rv.regId);
+      const reply = rv.reply ? `<div class="host-reply"><b>Chủ quán · ngày ${rv.reply.day}</b><p>${esc(HOST_REPLIES[rv.reply.kind].text)}</p>
+        <p class="muted small">${rec ? `Thiện cảm khi trả lời: ${rv.reply.delta > 0 ? '+' : ''}${rv.reply.delta}.` : 'Review chưa liên kết với khách trong sổ quen; phản hồi vẫn được lưu.'}
+        ${rec?.replyPromise?.reviewId === rv.id ? ' Khách đang chờ quán giữ lời ở lần ghé sau.' : ''}</p></div>`
+        : `<div class="host-reply-actions">${Object.entries(HOST_REPLIES).map(([kind, choice]) => `<button class="btn small ${kind === 'sassy' ? 'danger' : ''}"
+          data-reply="${kind}" data-review-id="${rv.id}" ${hostPlaying() ? 'disabled' : ''}>${choice.label}</button>`).join('')}</div>`;
+      return `<article>${reviewHTML(rv, { hideReply: true })}${reply}</article>`;
+    }).join('') : '<p class="note">Chưa có review. Mở cửa đón khách, rồi quay lại xem nhé!</p>');
+}
+function hostLoanHTML(kind) {
+  const bank = kind === 'bank', rate = bank ? C.BANK_RATE : C.SHARK_RATE;
+  const debt = S.loans[kind], interest = debt ? Math.max(1000, round1k(debt * rate)) : 0;
+  return `<p class="host-status">${bank ? '🏦 Ngân hàng khu phố' : '💀 Vay nóng · lãi cao'}</p>
+    <p>Tiền quán: <b>${money(S.money)}</b> · tổng nợ cả hai app: <b>${money(S.loans.bank + S.loans.shark)}</b>.</p>
+    <p>Lãi dự kiến tối nay trên khoản nợ hiện tại: <b>${money(interest)}</b>, cộng vào nợ.</p>
+    <p class="hint">${bank ? 'Ngân hàng xét hạn mức theo dàn máy và đánh giá; không có hạn trả cố định, trả bớt mỗi sáng để giảm lãi.'
+      : `Vay nóng không có kỳ ân hạn riêng cho từng lượt vay. Đang nợ ${S.sharkDays} ngày; sau ${C.SHARK_DUE_DAYS} ngày chưa trả hết, người đòi nợ có thể làm mất uy tín quán.`}</p>
+    ${hostPlaying() ? '<p class="note">Chỉ xem trong ca. Vay hoặc trả nợ vào buổi sáng.</p>' : ''}${loansHTML(kind)}`;
+}
+function hostDiceHTML() {
+  const rounds = diceRounds(), last = S.casino.rounds[S.casino.rounds.length - 1], g = S.gambling;
+  const canPlay = !hostPlaying() && g.lastRaidDay !== S.day && S.suspendDay !== S.day && !diceAnimating;
+  const betValue = Math.min(modal?.hostBet || C.HOST_DICE_BETS[0], Math.max(1, S.money));
+  const result = diceAnimating ? '<div class="host-dice-result" aria-live="polite"><div class="host-dice dice-rolling"><span>⚄</span><span>⚁</span><span>⚅</span></div><b>Đang quay xúc xắc…</b></div>' : last ? `<div class="host-dice-result ${last.won ? 'good-text' : 'bad-text'}" aria-live="polite"><div class="host-dice" aria-label="Xúc xắc ${last.dice.join(', ')}">${last.dice.map(d => `<span>${['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'][d]}</span>`).join('')}</div>
+    <b>${last.total} điểm · ${last.total <= C.HOST_DICE_SPLIT ? 'Tài' : 'Xỉu'} · ${last.won ? 'Thắng' : 'Thua'}</b>
+    <p>Ngày ${S.casino.day} · cược ${money(last.bet, true)} · nhận ${money(last.payout, true)} · ${last.won ? 'lãi' : 'mất'} ${money(last.bet, true)}.</p></div>` : '';
+  const customers = hostPlaying() ? `<h3>Khách trong quán</h3><p class="hint">Giới thiệu một lần mỗi khách người lớn. Khách có ngân sách riêng, có thể từ chối; thắng có thể thưởng ${Math.round(C.HOST_GAMBLE_TIP_RATE * 100)}% tiền lãi. Chơi tiếp khi đóng máy chủ. Thu chi trong ca chốt cuối ngày.</p>`
+    + R.pcs.filter(pc => pc.cust && !pc.cust.awaitingLoad).map(pc => {
+      const c = pc.cust, cg = c.gamble;
+      const allowed = c.seg !== 'hocsinh' && !c.shifty && !c.gambleInvited && !g.banned && g.lastRaidDay !== S.day && !R.closing;
+      return `<article class="host-news"><b>Máy ${pc.i + 1} · ${esc(c.name)}</b><p>${cg ? `Ngân sách còn ${money(cg.budget, true)} · ${cg.rounds}/${C.HOST_GAMBLE_CUSTOMER_ROUNDS} lượt · ${cg.pending ? '🎲 đang quay' : cg.active ? 'chờ lượt tiếp' : 'đã dừng'}` : c.gambleInvited ? 'Khách đã từ chối lời giới thiệu.' : c.seg === 'hocsinh' ? 'Không giới thiệu cho học sinh.' : 'Chưa giới thiệu.'}</p>
+        ${cg?.pending ? '<div class="host-dice dice-rolling" aria-label="Khách đang quay xúc xắc"><span>⚄</span><span>⚁</span><span>⚅</span></div>' : cg?.last ? `<p>🎲 ${cg.last.dice.join(' + ')} · ${cg.last.won ? 'Thắng' : 'Thua'} cược ${money(cg.last.bet, true)}</p>` : ''}
+        <button class="btn small danger" data-gamble-invite="${pc.i}" ${allowed ? '' : 'disabled'}>Giới thiệu tài xỉu</button></article>`;
+    }).join('') : '<p class="hint">Mở cửa rồi quay lại app để giới thiệu cho khách đang chơi.</p>';
+  return `<p class="host-status">🎲 Tiền game · ${S.casino.day === S.day ? S.casino.count : 0} lượt hôm nay · còn ${money(S.money, true)}</p>
+    <p>Luật riêng của quán: <b>3–10 Tài · 11–18 Xỉu</b>. Tung 3 xúc xắc; bộ ba vẫn tính tổng. Thắng nhận tổng x${C.HOST_DICE_PAYOUT}, đã gồm vốn cược.</p>
+    <p class="hint">Ví dụ cược 10k, thắng nhận 20k: lãi 10k. Kết quả được lưu ngay; tải lại không tung lại. Thu chi giải trí tách khỏi lợi nhuận quán.</p>
+    ${hostPlaying() ? '<p class="note">Chủ quán tự chơi buổi sáng; trong ca có thể giới thiệu khách hoặc dán bảng cấm.</p>' : ''}
+    ${!diceAnimating && g.lastCase?.day === S.day ? gamblingCaseHTML(g.lastCase) : ''}
+    ${S.suspendDay === S.day ? '<p class="bad-text">Hôm nay bị đình chỉ: tài xỉu bị khóa.</p>' : ''}
+    <div class="host-bets"><div><label for="host-bet">Số tiền cược (đồng)</label><input id="host-bet" type="number" inputmode="numeric" min="1" max="${Math.max(0, S.money)}" step="1" value="${betValue}" ${canPlay ? '' : 'disabled'}>
+      <div>${C.HOST_DICE_BETS.map(bet => `<button class="btn small ghost" data-bet-preset="${bet}" ${canPlay ? '' : 'disabled'}>${money(bet)}</button>`).join('')}</div>
+      <div>${['tai', 'xiu'].map(side => `<button class="btn" data-dice-side="${side}" ${canPlay && S.money >= 1 ? '' : 'disabled'}>${side === 'tai' ? 'Tài 3–10' : 'Xỉu 11–18'}</button>`).join('')}</div><p class="bad-text" data-bet-error role="alert"></p></div></div>
+    ${result}${rounds.length ? `<p class="muted small">Cả ngày: cược ${money(S.casino.wagered)}, nhận ${money(S.casino.paid)}. Không giới hạn lượt; mỗi lượt tăng nguy cơ bị phát hiện.</p>` : ''}
+    <p class="${g.risk >= C.HOST_GAMBLE_WARN ? 'bad-text' : 'hint'}">🚨 Mức nghi ngờ: <b>${Math.round(g.risk)}/${C.HOST_GAMBLE_RISK_MAX}</b>. ${g.risk >= C.HOST_GAMBLE_WARN ? 'Có dấu hiệu giao dịch bất thường; công an có thể kiểm tra.' : 'Chơi hoặc giới thiệu nhiều sẽ bị chú ý.'}</p>
+    <p class="hint">Tự chơi: phạt ít nhất ${money(C.HOST_GAMBLE_FINE)} hoặc ${C.HOST_GAMBLE_FINE_RATE * 100}% tiền cao nhất ngày. Giới thiệu khách: ít nhất ${money(C.HOST_GAMBLE_ORG_FINE)} hoặc ${C.HOST_GAMBLE_ORG_RATE * 100}%, đình chỉ 1 ngày. Ngày không cược mới giảm ${C.HOST_GAMBLE_DECAY} điểm nghi ngờ.</p>
+    <div class="host-ban"><b>${g.banned ? '🚫 Đang treo bảng CẤM CỜ BẠC' : 'Chưa treo bảng cấm cờ bạc'}</b><p>Chặn khách đặt lượt mới; lượt đã cược giải quyết xong. Bảng không xóa lịch sử vi phạm và không chặn chủ tự chơi.</p><button class="btn" data-gamble-ban="${g.banned ? 'off' : 'on'}">${g.banned ? 'Gỡ bảng cấm' : 'Dán bảng Cấm cờ bạc'}</button></div>${customers}`;
+}
+function renderHostApp(app = 'desktop') {
+  if (!modal?.host) return;
+  modal.hostApp = app;
+  const title = HOST_APPS.find(a => a.id === app);
+  const desktop = `<p class="host-status">Xin chào chủ quán · ${esc(S.shopName)} · ngày ${dayText()}</p>
+    <div class="host-apps">${HOST_APPS.map(a => `<button class="host-app" data-host-app="${a.id}"><span aria-hidden="true">${a.icon}</span><b>${a.name}</b><small>${a.desc}</small></button>`).join('')}</div>`;
+  modal.bodyEl.innerHTML = `<div class="host-toolbar">${app !== 'desktop' ? '<button class="btn small ghost" data-host-app="desktop">← Các app</button>' : ''}
+    <span>${title ? `${title.icon} ${title.name}` : '🖥️ Máy tính chủ'}</span><b>${money(S.money)}</b></div><div class="host-content">`
+    + (app === 'news' ? hostNewsHTML() : app === 'reviews' ? hostReviewsHTML() : ['bank', 'shark'].includes(app) ? hostLoanHTML(app) : app === 'dice' ? hostDiceHTML() : desktop) + '</div>';
+  modal.bodyEl.scrollTop = 0;
+}
+function openHost() {
+  if (!S || atTitle || (modal && !modal.dismissable)) return;
+  closeModal();
+  const playing = hostPlaying(), wasPaused = playing && R.paused;
+  if (playing) setPause(true);
+  const m = openModal({ title: '🖥️ Máy tính chủ', cls: 'modal-host', body: '',
+    actions: [{ label: '🏠 Về tiêu đề', cls: 'ghost', onClick: returnToTitle }, { label: 'Đóng máy chủ', cls: 'primary', onClick: closeModal }],
+    onClose: () => { if (hostPlaying() && !wasPaused) setPause(false); } });
+  m.host = true;
+  m.bodyEl.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b || b.disabled) return;
+    if (diceAnimating) return;
+    if (b.dataset.hostApp) return renderHostApp(b.dataset.hostApp);
+    if (CloudSave.state().blocked || CloudSave.state().busy) return;
+    if (b.dataset.betPreset) { m.bodyEl.querySelector('#host-bet').value = b.dataset.betPreset; m.hostBet = +b.dataset.betPreset; return; }
+    let ok = false;
+    if (b.dataset.reply) ok = replyReview(+b.dataset.reviewId, b.dataset.reply);
+    else if (b.dataset.diceSide) {
+      const input = m.bodyEl.querySelector('#host-bet'), bet = +input.value;
+      if (!validDiceBet(bet) || bet > S.money || !Number.isSafeInteger(S.money + bet)) {
+        m.bodyEl.querySelector('[data-bet-error]').textContent = 'Nhập số tiền nguyên từ 1 đồng đến số tiền đang có.';
+        return;
+      }
+      m.hostBet = bet;
+      ok = rollDice(b.dataset.diceSide, bet);
+      if (ok) {
+        diceAnimating = true;
+        renderPrep();
+        renderHostApp('dice');
+        setTimeout(() => {
+          diceAnimating = false;
+          if (modal === m) renderHostApp('dice');
+        }, C.HOST_DICE_ANIMATION_MS);
+        return;
+      }
+    }
+    else if (b.dataset.gambleInvite !== undefined) ok = inviteGambling(+b.dataset.gambleInvite);
+    else if (b.dataset.gambleBan) ok = setGamblingBan(b.dataset.gambleBan === 'on');
+    else if (!hostPlaying() && (b.dataset.borrow || b.dataset.repay)) {
+      const kind = b.dataset.borrow || b.dataset.repay;
+      if (!['bank', 'shark'].includes(kind)) return;
+      ok = b.dataset.borrow ? borrow(kind, +b.dataset.amt) : repay(kind, +b.dataset.amt);
+    }
+    if (ok && modal === m) { if (!hostPlaying()) renderPrep(); renderHostApp(m.hostApp); }
+  });
+  renderHostApp();
 }
 
 // ---------- Thư viện game ----------
@@ -252,7 +633,7 @@ function removeExpired(k) {
 
 // ---------- Sổ sách 5 ngày, kế toán và thuế ----------
 const emptyBook = () => ({ revenue: 0, refunds: 0, materials: 0, operating: 0, investment: 0, assetSales: 0,
-  salvage: 0, wasteCost: 0, wasteQty: 0, nightCost: 0 });
+  salvage: 0, wasteCost: 0, wasteQty: 0, nightCost: 0, leisureIn: 0, leisureOut: 0, gambleTips: 0, gambleFine: 0 });
 const accountantActive = (day = S.day) => day < S.accountant.until;
 const bookProfit = b => b.revenue + b.salvage - b.refunds - b.materials - b.operating;
 const taxFor = profit => Math.floor(Math.min(Math.max(0, profit - C.TAX_FREE), C.TAX_UPPER - C.TAX_FREE) * C.TAX_RATE
@@ -385,6 +766,8 @@ function reportHTML(b) {
     ${row('Giá vốn nguyên liệu', b.materials)}${row('Chi phí vận hành', b.operating)}
     ${row('Lợi nhuận trước thuế', b.profit)}${row(b.free ? 'Thuế (kỳ đầu miễn)' : 'Thuế kỳ này', b.tax)}
     ${row('Lợi nhuận sau thuế', b.net)}${row('Tiền đầu tư riêng', b.investment)}${row('Thu thanh lý máy riêng', b.assetSales)}
+    ${b.leisureOut ? `<p class="muted small">🎲 Giải trí riêng: cược ${money(b.leisureOut)}, nhận ${money(b.leisureIn)}. Không tính vào lãi và thuế kinh doanh.</p>` : ''}
+    ${b.gambleTips || b.gambleFine ? `<p class="muted small">🎲 Khách thưởng từ cược: ${money(b.gambleTips)} · phạt cờ bạc: ${money(b.gambleFine)}. Tách khỏi lãi và thuế kinh doanh.</p>` : ''}
     <p class="muted small">Thu hồi đồ thải: ${money(b.salvage)} · giá vốn đồ bỏ: ${money(b.wasteCost)} (đã nằm trong giá vốn).</p></div>`;
 }
 function accountsHTML() {
@@ -500,8 +883,19 @@ function wasteHTML() {
 
 // ---------- Màn hình & modal ----------
 function showScreen(name) {
+  atTitle = name === 'title';
   document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === 'screen-' + name));
   window.scrollTo(0, 0);
+}
+
+function returnToTitle() {
+  closeModal();
+  if (R && !R.over) {
+    titleWasPaused = R.paused;
+    setPause(true);
+  }
+  refreshContinue();
+  showScreen('title');
 }
 
 // dock = hiện ở quầy thao tác nửa dưới màn chơi (không che cảnh quán, vẫn bấm được khách và máy)
@@ -834,7 +1228,7 @@ function remember(c, sat, pcNo) {
     S.regulars.splice(S.regulars.indexOf(drop), 1);
   }
   if (isNew) R.led.newFaces++; else R.led.returning++;
-  return { n: rec.visits, delta: rec.aff - before, isNew, gone };
+  return { id: rec.id, n: rec.visits, delta: rec.aff - before, isNew, gone };
 }
 
 // Chọn một khách quen quay lại (hoặc null = khách mới). w = trọng số hạng máy đang có.
@@ -882,6 +1276,7 @@ function regularGreet(c) {
 
 // Khách rời quán: ghi vào sổ cuối ngày và có thể đăng review Google Maps.
 function finishVisit(c, pcNo, forcedStars) {
+  settleReplyPromise(c, forcedStars);
   const stars = forcedStars || clamp(Math.round(c.sat / 20 + rand(-0.5, 0.5)), 1, 5);
   const { key, text } = comment(c, stars, pcNo);
   const seg = segOf(c), tr = traitOf(c);
@@ -893,6 +1288,7 @@ function finishVisit(c, pcNo, forcedStars) {
   R.led.visits.push(visit);
   if (Math.random() > C.REVIEW_CHANCE[stars]) return null;
   const rv = {
+    id: S.nextReviewId++, regId: visit.reg.id, key, game: c.game,
     name: c.name, avatar: c.avatar, stars, day: S.day, time: clockText(R.time), text,
     who: c.seg === 'vanglai' ? '' : seg.name + (tr.name ? ' · ' + tr.name : ''),
     guide: Math.random() < 0.15 ? Math.round(rand(5, 180)) : 0,   // "Local Guide · N bài đánh giá"
@@ -906,13 +1302,14 @@ function finishVisit(c, pcNo, forcedStars) {
   return rv;
 }
 
-function reviewHTML(rv) {
+function reviewHTML(rv, options = {}) {
   const sub = rv.guide ? `Local Guide · ${rv.guide} bài đánh giá` : rv.who || '';
   return `<div class="review s${rv.stars}">
     <div class="rv-head"><span class="rv-av">${rv.avatar}</span>
       <div><b>${esc(rv.name)}</b>${sub ? `<div class="rv-guide">${esc(sub)}</div>` : ''}</div></div>
     <div class="rv-meta">${starsHTML(rv.stars)}<span class="muted small">Ngày ${rv.day} · ${rv.time}</span></div>
     <p class="rv-text">${esc(rv.text)}</p>
+    ${rv.reply && !options.hideReply ? `<p class="muted small">💬 Chủ quán đã trả lời · ${esc(HOST_REPLIES[rv.reply.kind]?.text || '')}</p>` : ''}
   </div>`;
 }
 
@@ -1278,6 +1675,7 @@ function askFireStaff(id) {
     ] });
 }
 function renderPrep() {
+  gamblingPeak();
   ensureWasteQuote();
   autoSellWaste();
   renderMorning();
@@ -1332,7 +1730,7 @@ function renderPrep() {
     (empty.length ? `<p class="warn-text">⚠️ Đang hết: ${empty.join(', ')} — khách gọi sẽ không có mà bán!</p>` : '') +
     (expTotal ? `<p class="bad-text">☠️ Kho còn ${expTotal} món hết date — sẽ bị dùng trước. Khách có thể đau bụng, công an kiểm tra là bị phạt!</p>` : '') +
     (S.pendingPolice || S.pendingKid ? `<p class="bad-text">👮 Hôm qua có người báo công an — sáng nay công an sẽ tới kiểm tra!</p>` : '') +
-    (S.suspendDay === S.day ? '<p class="bad-text">🚫 Hôm nay quán bị đình chỉ vì mở quá giờ nhiều lần — không mở cửa được.</p>' : '') +
+    (S.suspendDay === S.day ? `<p class="bad-text">🚫 Hôm nay quán bị đình chỉ vì ${S.suspendReason === 'gambling' ? 'giới thiệu cờ bạc mạng' : 'mở quá giờ nhiều lần'} — không mở cửa được.</p>` : '') +
     billHTML() + netPlansHTML() + loansHTML();
   $('#prep-accounts').innerHTML = accountsHTML();
   $('#prep-waste').innerHTML = wasteHTML();
@@ -1405,6 +1803,7 @@ function autoPayBill(news) {
 // Vay vốn: ngân hàng lãi thấp có hạn mức; vay nóng lãi cao, ai cũng vay được, lâu không trả có người tới đòi
 const bankLimit = () => round1k((C.BANK_BASE + C.BANK_PER_PC * S.machines.length) * S.rating / 3);
 function canBorrow(kind, amt) {
+  if (!['bank', 'shark'].includes(kind) || !Number.isSafeInteger(amt) || amt <= 0) return false;
   if (kind === 'bank') {
     if (S.dueBill && S.day > S.dueBill.dueDay) return false;   // đang trễ hóa đơn thì ngân hàng không cho vay
     return S.loans.bank + amt <= bankLimit();
@@ -1412,31 +1811,37 @@ function canBorrow(kind, amt) {
   return S.loans.shark + amt <= C.SHARK_MAX;
 }
 function borrow(kind, amt) {
-  if (!canBorrow(kind, amt)) return;
+  if (hostPlaying() || !canBorrow(kind, amt)) return false;
+  const before = { money: S.money, debt: S.loans[kind] };
   S.loans[kind] += amt;
   S.money += amt;
-  saveGame();
+  if (saveGame() === false) { S.money = before.money; S.loans[kind] = before.debt; return false; }
   renderPrep();
+  return true;
 }
 function repay(kind, amt) {
+  if (hostPlaying() || !['bank', 'shark'].includes(kind) || !Number.isSafeInteger(amt) || amt < 0) return false;
   const pay = Math.min(amt || S.loans[kind], S.loans[kind], Math.max(0, S.money));
-  if (pay <= 0) return;
+  if (pay <= 0) return false;
+  const before = { money: S.money, debt: S.loans[kind], sharkDays: S.sharkDays };
   S.loans[kind] -= pay;
   S.money -= pay;
   if (!S.loans.shark) S.sharkDays = 0;
-  saveGame();
+  if (saveGame() === false) { S.money = before.money; S.loans[kind] = before.debt; S.sharkDays = before.sharkDays; return false; }
   renderPrep();
+  return true;
 }
-function loansHTML() {
+function loansHTML(only) {
   const L = S.loans;
   const btn = (attr, kind, amt, label, ok) => `<button class="btn small ${attr === 'repay' ? '' : 'ghost'}" data-${attr}="${kind}" data-amt="${amt}" ${ok ? '' : 'disabled'}>${label}</button>`;
   const row = (kind, icon, name, rate, note) => {
+    if (only && only !== kind) return '';
     const bal = L[kind];
     const amts = [100000, 300000];
     return `<div class="loan-row"><div><b>${icon} ${name}</b> · lãi ${(rate * 100).toFixed(1).replace('.0', '')}%/ngày
         <div class="muted small">${bal ? `Đang nợ <b>${money(bal)}</b>` : 'Chưa nợ'} · ${note}</div></div>
-      <div class="loan-btns">${amts.map(a => btn('borrow', kind, a, `Vay ${money(a)}`, canBorrow(kind, a))).join('')}
-        ${bal ? btn('repay', kind, 0, `Trả ${money(Math.min(bal, Math.max(0, S.money)))}`, S.money > 0) : ''}</div></div>`;
+      <div class="loan-btns">${amts.map(a => btn('borrow', kind, a, `Vay ${money(a)}`, !hostPlaying() && canBorrow(kind, a))).join('')}
+        ${bal ? btn('repay', kind, 0, `Trả ${money(Math.min(bal, Math.max(0, S.money)))}`, !hostPlaying() && S.money > 0) : ''}</div></div>`;
   };
   const late = S.dueBill && S.day > S.dueBill.dueDay;
   return `<div class="loans"><h4>🏦 Vay vốn</h4>
@@ -1481,7 +1886,10 @@ function startDay() {
     pcs: S.machines.map((m, i) => ({ i, m, tier: machineTier(m), cust: null, dirty: false, cleaningBy: null, cleanIn: 0,
       broken: false, repair: 0, brokeFor: 0, breakLoss: 0, el: null, bubbleKey: '' })),
     led: { pingHours: 0, hours: 0, food: 0, tips: 0, power: 0, staff: 0, staffMistakes: 0, served: 0, walkouts: 0, satSum: 0, ratingBefore: S.rating, reviews: [], lost: {}, fine: 0, sick: 0, visits: [],
-      returning: 0, newFaces: 0, gone: [],
+      returning: 0, newFaces: 0, gone: [], replyNotes: [],
+      leisureIn: S.casino.day === S.day ? S.casino.paid : 0, leisureOut: S.casino.day === S.day ? S.casino.wagered : 0,
+      gambleTips: 0, gambleFine: S.gambling.lastCase?.day === S.day ? S.gambling.lastCase.fine : 0,
+      gambleCase: S.gambling.lastCase?.day === S.day ? S.gambling.lastCase : null, gambleInvites: 0, gambleWagered: 0, gambleNotes: [],
       acPower: 0, fuel: 0, refund: 0, hotHours: 0, darkHours: 0, smashes: 0, outages: 0, noise: 0, kicked: 0, mom: [], thefts: [], caught: 0, thiefCash: 0,
       lights: 0, nightWage: 0, closeRefund: 0, overnight: 0, raid: null, closedAt: 0, staffLoads: 0 },
     // đóng cửa chủ động: closing = đang chuẩn bị đóng (không nhận khách mới) · shutter = kéo cửa cuốn · speed = tua nhanh
@@ -2016,6 +2424,9 @@ function spawnCustomer(thief = false) {
   const g = GAMES[game].name;
   // khách lạ lộ tính cách qua câu chào; khách quen nhắc chuyện lần trước hoặc xin máy quen
   c.greet = lost ? '' : rec ? regularGreet(c) : tr.greet ? pick(tr.greet) : '';
+  if (!lost && !rec && !c.thief && hostTrend().segs.includes(c.seg) && Math.random() < C.HOST_TREND_CHANCE) {
+    c.greet = `${c.greet} ${hostTrend().greet}`.trim();
+  }
   const request = lost ? pick(LOST_LINES)(g)
     : thief ? pick(THIEF_LINES)(TIERS[tier].phrase, hoursText(hours))
     : overnight ? pick(OVERNIGHT_LINES)(TIERS[tier].phrase, g)
@@ -2802,6 +3213,7 @@ function leaveUnloaded(pc) {
 function leave(pc, reason) {
   const c = pc.cust;
   if (!c) return;
+  settleCustomerGamble(c);
   if (pc.broken) settleBreak(pc, false);
   if (c.order) {
     if (modal && modal.pc === pc) closeModal();
@@ -2890,6 +3302,7 @@ function update(dt) {
   const gh = dt * 1000 / C.GAME_HOUR_MS;
   R.time += gh;
   R.paceRest = Math.max(0, (R.paceRest || 0) - dt);
+  if (updateGambling(dt, gh)) return;
 
   // công an tới (đợi chủ quán làm xong việc đang dở)
   // (quầy thao tác ở nửa dưới không chặn — công an tới thì đóng quầy lại)
@@ -3068,7 +3481,10 @@ function nightRaid() {
     R.led.fine += fine;
   }
   if (n >= 2) S.rating = clamp(S.rating - C.NIGHT_RATING_HIT, 1, 5);
-  if (suspend) S.suspendDay = S.day + 1;
+  if (suspend) {
+    if (S.suspendDay !== S.day + 1 || S.suspendReason !== 'gambling') S.suspendReason = 'night';
+    S.suspendDay = S.day + 1;
+  }
   const kids = kidsPlaying().length;
   R.led.raid = { n, fine, suspend, time: R.time, kids };
   log(`🚨 Công an kiểm tra lúc ${clockText(R.time)} — quán phải đóng cửa${fine ? `, phạt ${money(fine)}` : ''}`);
@@ -3146,8 +3562,8 @@ function tick(now) {
   lastFrame = now;
   if (hold) hold.target[hold.prop] = Math.min(hold.max, hold.target[hold.prop] + hold.rate * dt);
   // tua nhanh: chạy logic nhiều bước mỗi khung hình (dừng ngay nếu hết ngày hoặc có sự kiện bắt tạm dừng)
-  for (let k = 0; R && k < R.speed && !R.over && !R.paused; k++) update(dt);
-  if (R && !R.over) renderPlay(R.paused ? 0 : dt);
+  for (let k = 0; !atTitle && R && k < R.speed && !R.over && !R.paused; k++) update(dt);
+  if (!atTitle && R && !R.over) renderPlay(R.paused ? 0 : dt);
   if (modal && modal.update) modal.update();
   requestAnimationFrame(tick);
 }
@@ -3313,6 +3729,7 @@ function renderPlay(dt = 0) {
 
   PlayScene.frame({
     time: R.time, pcs: R.pcs, queue: R.queue, selected: R.selected, pick: R.pick,
+    gamblingBanned: S.gambling.banned,
     cooking: modal && modal.docked && modal.pc ? modal.pc.i : null,
     paused: R.paused, repairSeconds: C.REPAIR_SECONDS, dark,
   }, dt);
@@ -3360,6 +3777,7 @@ function renderDoorCtl() {
 }
 
 const sceneHandlers = {
+  host: openHost,
   pc: i => { if (R && R.pcs[i]) onPcClick(R.pcs[i]); },
   bubble: i => {
     const pc = R && R.pcs[i];
@@ -3402,6 +3820,10 @@ function endDay() {
   S.pendingKid += R.kidReports;
   R.reports = R.kidReports = 0;
   const day = S.day;
+  if (S.gambling.activityDay !== day) {
+    S.gambling.risk = Math.max(0, S.gambling.risk - C.HOST_GAMBLE_DECAY);
+    if (!S.gambling.risk) S.gambling.organized = false;
+  }
   S.day++;
   const books = closeBooks(day, costs);
   S.forecast = clamp(Math.round(S.forecast + rand(-3, 3)), ...C.FORECAST);
@@ -3604,13 +4026,18 @@ function ledgerHTML(led, costs, interest) {
     ${row('🍳 Giá vốn nguyên liệu đã dùng/bỏ', minus(materials))}
     ${prep ? row('🧮 Chi phí sáng, kế toán & phạt hóa đơn', minus(prep)) : ''}
     ${row(profit >= 0 ? 'Lãi hôm nay trước thuế' : 'Lỗ hôm nay trước thuế', (profit >= 0 ? '+' : '') + money(profit), 'total ' + (profit >= 0 ? 'up' : 'down'))}
+    ${led.leisureOut ? `<p class="note">🎲 Giải trí riêng buổi sáng: cược ${money(led.leisureOut)}, nhận ${money(led.leisureIn)}; chênh lệch ${money(led.leisureIn - led.leisureOut)}. Đã tính vào tiền quán, tách khỏi lãi kinh doanh bên trên.</p>` : ''}
+    ${led.gambleTips || led.gambleFine || led.gambleInvites ? `<p class="note">🎲 Giới thiệu ${led.gambleInvites} khách đồng ý · khách cược ${money(led.gambleWagered)} bằng tiền riêng · thưởng chủ ${money(led.gambleTips)} · phạt cờ bạc ${money(led.gambleFine)}. Thưởng và phạt tách khỏi lãi kinh doanh.</p>` : ''}
+    ${led.gambleCase ? gamblingCaseHTML(led.gambleCase) : ''}
+    ${led.gambleNotes?.length ? `<details><summary>🎲 Diễn biến cờ bạc trong quán</summary>${led.gambleNotes.map(n => `<p>${esc(n)}</p>`).join('')}</details>` : ''}
+    ${led.replyNotes?.length ? `<p class="note">💬 Sau phản hồi review: ${led.replyNotes.map(esc).join(' · ')}</p>` : ''}
     <p class="muted small">Bấm vào từng nhóm để xem chi tiết. Hóa đơn tuần đang cộng dồn <b>${money(S.bill.rent + S.bill.net + S.bill.power)}</b>${S.bill.days ? `, chốt sau ${C.BILL_DAYS - S.bill.days} ngày` : ''}.</p>
   </div>`;
 }
 // Ghi chú hạ tầng trong ngày (nóng, mạng, cúp điện, phím) + tin về ngày mai
 function infraNotes(led) {
   const p = [];
-  if (R.suspended) p.push(['bad', '🚫 Hôm nay quán bị đình chỉ vì mở quá giờ nhiều lần: không mở cửa được, vẫn tốn mặt bằng.']);
+  if (R.suspended) p.push(['bad', `🚫 Hôm nay quán bị đình chỉ vì ${S.suspendReason === 'gambling' ? 'giới thiệu cờ bạc mạng' : 'mở quá giờ nhiều lần'}: không mở cửa được, vẫn tốn mặt bằng và lãi vay.`]);
   else if (led.closedAt >= C.NIGHT_FROM) p.push(['note', `🌙 Mở tới ${clockText(led.closedAt)}${led.overnight ? ` · ${led.overnight} khách bao đêm` : ''}.`]);
   if (led.raid) p.push(['bad', `👮 Công an kiểm tra lúc ${clockText(led.raid.time)}, buộc đóng cửa${led.raid.fine ? `, phạt ${money(led.raid.fine)}` : ' (cảnh cáo)'}. Vi phạm lần ${led.raid.n}.`]);
   if (S.suspendDay === S.day) p.push(['bad', `🚫 <b>Ngày mai (ngày ${S.day}) quán bị đình chỉ</b>, không được mở cửa.`]);
@@ -3692,6 +4119,9 @@ function openHowTo() {
     body: `<ol class="howto">
        <li><b>🚪 Đón khách:</b> nhân viên tự dẫn khách vào máy đúng hạng, sạch và hoạt động tốt. Nhân viên đã đào tạo tự nạp đúng giờ khách yêu cầu; người chưa đào tạo vẫn chuyển quầy cho bạn giữ nút hoặc giữ Space. Nếu chỉ còn máy khác nhu cầu, nhân viên hỏi ý bạn trước khi dẫn khách vào.</li>
       <li><b>🧘 Nhịp quán:</b> khách tới thưa hơn khi còn nhiều việc chờ xử lý; sau mẹ gank, trộm hoặc công an có khoảng nghỉ đón khách. Nút <i>🦹 Bắt trộm</i>, <i>📢 Nhắc máy</i> và <i>🌙 Đóng cửa</i> nằm dưới cảnh quán, luôn hiện cả khi mở quầy. Việc khẩn cấp trả tua nhanh về ×1; hộp thoại nhắc khách ồn tạm dừng để bạn chọn.</li>
+      <li><b>🏠 Về tiêu đề:</b> quay về màn Chơi tiếp / Chơi mới. Ca đang mở sẽ tạm dừng trong tab này; Chơi tiếp trở lại đúng ca. Tải lại hoặc đóng tab chỉ giữ mốc lưu buổi sáng.</li>
+      <li><b>🖥️ Máy tính chủ:</b> bấm màn hình ở quầy hoặc nút Máy chủ để mở Bảng tin phố, Đánh giá, Ngân hàng, Vay nóng và Tài xỉu. Đọc tin cúp điện, game hot, trend trước khi mở cửa. Rep review một lần, không đổi sao cũ; xin lỗi rồi làm tốt ở lần ghé sau mới thêm thiện cảm. Cà khịa làm mất thiện cảm. Quán tạm dừng khi mở máy chủ; trả lời, vay/trả nợ và tự chơi tài xỉu thực hiện buổi sáng.</li>
+      <li><b>🎲 Tài xỉu tiền game:</b> nhập tiền nguyên tùy ý, không giới hạn lượt; 3–10 Tài / 11–18 Xỉu, thắng nhận tổng x${C.HOST_DICE_PAYOUT} gồm vốn. Kết quả lưu trước khi quay. Chơi nhiều/cược lớn tăng nghi ngờ, bị bắt thì phạt theo tiền cao nhất ngày. Trong ca dùng app giới thiệu một lần mỗi khách người lớn; khách có tiền riêng, có thể từ chối hoặc thưởng một phần lãi khi thắng. Giới thiệu bị phát hiện còn đình chỉ 1 ngày, vẫn trả mặt bằng/lãi. Dán bảng cấm chặn khách đặt mới, giải quyết lượt đã cược, không xóa nghi ngờ. Một ngày không cược mới giảm nghi ngờ.</li>
       <li><b>🎮 Game:</b> quán chưa cài game khách muốn thì khách bỏ đi. Buổi sáng xem game nào đang 🔥 hot và mua thêm game trong <i>Thư viện game</i>.</li>
       <li><b>⏱️ Nạp giờ:</b> giữ nút để nạp, thả tay ngay vạch vàng. Nạp dư là cho không, nạp thiếu khách sẽ cáu.</li>
        <li><b>🍜 Gọi đồ:</b> nhân viên nhận đơn ở máy mình phụ trách và quầy bếp tự hiện. Bạn làm món, giữ nút hoặc Space để nấu/rót, rồi giao nhân viên mang ra. Nếu đóng quầy, dùng nút công việc dưới cửa để mở lại. Máy chưa có nhân viên thì bạn tự hỏi khách và mang món.</li>
@@ -3829,7 +4259,11 @@ async function openTransfer() {
 
 // ---------- Tài khoản và bản lưu trực tuyến ----------
 function refreshContinue() {
-  const saved = loadGame();
+  const playing = !!(R && !R.over);
+  const saved = playing ? S : loadGame();
+  $('#title-session').hidden = !playing;
+  $('#btn-transfer').disabled = playing || CloudSave.state().busy || CloudSave.state().blocked;
+  $('#title-cloud').disabled = playing || CloudSave.state().busy || CloudSave.state().blocked;
   $('#btn-continue').hidden = !saved;
   $('#btn-continue').innerHTML = saved?.shopName
     ? `Chơi tiếp<small>${esc(saved.shopName)} · ngày ${saved.day}</small>` : 'Chơi tiếp';
@@ -3920,6 +4354,12 @@ function init() {
       ? `Chơi tiếp<small>${esc(saved.shopName)} · ngày ${saved.day}</small>` : 'Chơi tiếp';
   }
   $('#btn-continue').addEventListener('click', () => {
+    if (R && !R.over) {
+      closeModal();
+      showScreen('play');
+      setPause(titleWasPaused);
+      return;
+    }
     const s = loadGame();
     if (!s) return;
     S = s;
@@ -3941,11 +4381,17 @@ function init() {
     });
   });
   $('#btn-transfer').addEventListener('click', openTransfer);
+  document.querySelectorAll('[data-action="title"]').forEach(b => b.addEventListener('click', returnToTitle));
+  document.querySelectorAll('[data-action="host"]').forEach(b => b.addEventListener('click', openHost));
+  $('#prep-scene').addEventListener('click', e => { if (e.target.closest('[data-hit="host"]')) openHost(); });
+  for (const id of ['scene', 'prep-scene']) $('#'+id).addEventListener('keydown', e => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.closest('[data-hit="host"]')) { e.preventDefault(); openHost(); }
+  });
   document.querySelectorAll('[data-action="cloud"]').forEach(b => b.addEventListener('click', openCloud));
   window.addEventListener('cloud-save-status', e => {
     const st = e.detail;
     document.querySelectorAll('.cloud-status').forEach(n => { n.textContent = st.status; });
-    for (const id of ['btn-new','btn-continue','btn-open','btn-transfer']) $('#'+id).disabled = st.busy || st.blocked;
+    for (const id of ['btn-new','btn-continue','btn-open','btn-transfer','title-cloud']) $('#'+id).disabled = st.busy || st.blocked || (['btn-transfer','title-cloud'].includes(id) && R && !R.over);
     if (st.blocked) {
       if (R && !R.over) setPause(true);
       openModal({ title: 'Game đang mở ở tab khác', body: '<p>'+esc(st.status)+'</p>', dismissable: false,

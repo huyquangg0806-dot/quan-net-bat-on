@@ -108,7 +108,14 @@ function counterSVG() {
     <text class="baloo" y="6" text-anchor="middle" font-size="15" fill="#FFF3DA">NET</text>
   </g>
   <!-- Máy chủ + hộp tiền -->
-  <rect x="1104" y="334" width="56" height="40" rx="3" fill="#2D2F36"/><rect x="1127" y="374" width="10" height="6" fill="#2D2F36"/>
+  <g data-hit="host" role="button" tabindex="0" aria-label="Mở máy tính chủ" class="host-monitor">
+    <title>Máy tính chủ · bấm để mở các app</title>
+    <rect x="1095" y="324" width="78" height="58" fill="transparent"/>
+    <rect x="1104" y="334" width="56" height="40" rx="3" fill="#2D2F36"/>
+    <rect x="1109" y="339" width="46" height="29" rx="2" fill="#1FA89A"/>
+    <text x="1132" y="358" text-anchor="middle" font-size="11" fill="#FFFDF4">APP</text>
+    <rect x="1127" y="374" width="10" height="6" fill="#2D2F36"/>
+  </g>
   <rect x="1166" y="360" width="38" height="20" rx="2" fill="#D9CFB8"/><rect x="1171" y="365" width="28" height="4" fill="#9A8F78"/>
   <!-- Ống đũa, chồng tô, tương ớt (chừa chỗ cho mặt chủ quán) -->
   <g transform="translate(1218 380)">
@@ -815,6 +822,7 @@ function morningSVG(name, lines, rates, hot) {
     '<rect width="760" height="490" fill="#F2DFB4"/><rect y="383" width="760" height="107" fill="#E9CE9C"/><path d="M0 381H760 M0 435H760" stroke="#4E8F80" stroke-width="6"/>'+awningSVG(name)+
     '<rect x="80" y="65" width="570" height="'+(y-10)+'" rx="10" fill="#A86F45"/><rect x="93" y="78" width="544" height="'+(y-36)+'" rx="3" fill="#354C43"/><g fill="#FFF6E3" font-family="Patrick Hand,cursive" font-size="23"><text x="365" y="108" text-anchor="middle" font-size="29">✦ Menu hôm nay ✦</text>'+rows+
     '<text x="110" y="'+(y+2)+'" font-size="17" fill="#B3E1CE">'+safe(rates)+'</text><text x="110" y="'+(y+27)+'" font-size="19" fill="#FFC08F">HOT hôm nay: '+safe(hot)+'</text></g>'+
+    '<g data-hit="host" role="button" tabindex="0" aria-label="Mở máy tính chủ" class="host-monitor"><title>Máy tính chủ · bấm để mở các app</title><rect x="520" y="387" width="110" height="82" rx="8" fill="#FFFDF4"/><rect x="534" y="394" width="82" height="49" rx="4" fill="#2D2F36"/><rect x="540" y="400" width="70" height="36" rx="2" fill="#1FA89A"/><text x="575" y="424" text-anchor="middle" font-size="19" fill="#FFFDF4">APP</text><text x="575" y="462" text-anchor="middle" font-size="17" fill="#3A2A22">Máy chủ</text></g>'+
     '<g transform="translate(690 456) scale(.6)">'+standingSVG(OWNER_LOOK,{owner:true,mood:'smile'})+'<path d="M-28,-110 L-70,0" stroke="#A86F45" stroke-width="6"/><path d="M-70,-10 l-18,22 h34z" fill="#D9A73D"/></g><g transform="translate(52 468) scale(.65)">'+dogSVG(true)+'</g></svg>', 'pr-');
 }
 function itemSVG(k) {

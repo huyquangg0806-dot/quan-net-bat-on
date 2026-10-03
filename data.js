@@ -1,5 +1,24 @@
 // Dữ liệu & cân bằng game — chỉnh các con số ở đây để đổi độ khó.
 
+const HOST_APPS = [
+  { id: 'news', icon: '🌐', name: 'Bảng tin phố', desc: 'Điện, game hot, chuyện trong ngày' },
+  { id: 'reviews', icon: '📍', name: 'Đánh giá quán', desc: 'Đọc và trả lời khách' },
+  { id: 'bank', icon: '🏦', name: 'Ngân hàng', desc: 'Vay vốn, xem và trả nợ' },
+  { id: 'shark', icon: '💀', name: 'Vay nóng', desc: 'Dễ vay, lãi cao, nhớ trả' },
+  { id: 'dice', icon: '🎲', name: 'Tài xỉu', desc: 'Tiền game · chơi nhiều dễ bị phát hiện' },
+];
+const HOST_REPLIES = {
+  thanks: { label: 'Cảm ơn', text: 'Cảm ơn bạn đã ghé! Quán sẽ cố giữ phong độ để lần sau bạn vẫn chơi vui.', outcome: 'Khách vui vì được chủ quán để ý.' },
+  apology: { label: 'Xin lỗi, hứa sửa', text: 'Quán nhận lỗi và sẽ sửa chuyện này. Mong lần ghé sau bạn cho quán cơ hội làm tốt hơn.', outcome: 'Khách ghi nhận lời xin lỗi, đang chờ quán làm đúng lời hứa.' },
+  explain: { label: 'Giải thích lịch sự', text: 'Cảm ơn bạn đã góp ý. Quán sẽ kiểm tra lại ca hôm đó và điều chỉnh cho hợp lý.', outcome: 'Khách ghi nhận phản hồi lịch sự.' },
+  sassy: { label: 'Cà khịa', text: 'Quán net bất ổn mà bạn đòi mọi thứ ổn hết thì khó cho quán quá!', outcome: 'Khách thấy quán đùa sai lúc, thiện cảm giảm.' },
+};
+const HOST_TRENDS = [
+  { title: 'Một ván thôi rồi về', text: 'Hội game thủ đang rủ nhau “một ván thôi”. Cài game hot và để ý khách xin thêm giờ, đừng nhập đồ theo lời hứa về sớm.', greet: 'Em chơi một ván thôi rồi về, lần này nói thiệt!', segs: ['rank', 'gioi', 'hocsinh', 'vanglai'] },
+  { title: 'Mì phải ra trước pha combat', text: 'Dân mạng đang khoe bát mì đúng lúc vào trận. Chuẩn bị nguyên liệu còn hạn và mang món kịp lúc; khách đói vẫn chê mì sống như thường.', greet: 'Mì ra trước combat giúp em, em còn gánh team!', segs: ['rank', 'gioi', 'hocsinh', 'vanglai'] },
+  { title: 'Ghế êm, tâm hồn bình yên', text: 'Trend hôm nay là góc chơi sạch và ghế êm. Dọn bàn, sửa máy hao mòn trước khi mở cửa; ảnh đẹp không cứu được bàn bẩn.', greet: 'Cho em góc sạch sạch, em cần bình yên sau chuỗi thua.', segs: ['rank', 'gioi', 'vanphong', 'vanglai'] },
+];
+
 const CONFIG = {
   GAME_HOUR_MS: 15000,     // 1 giờ trong game = 15 giây thật
   OPEN_HOUR: 8,
@@ -89,6 +108,42 @@ const CONFIG = {
   // Xác suất khách để lại review theo số sao (chỉ số 1–5). Khách bực thì hay review hơn.
   REVIEW_CHANCE: [0, 0.85, 0.6, 0.3, 0.4, 0.6],
   REVIEW_KEEP: 40,         // số review lưu lại
+  HOST_REPLY_THANKS: 3,    // thiện cảm khi cảm ơn một review tốt
+  HOST_REPLY_APOLOGY: 2,   // thiện cảm khi nhận lỗi trước khách chê
+  HOST_REPLY_EXPLAIN: 1,
+  HOST_REPLY_SASSY: -6,
+  HOST_PROMISE_GOOD: 6,    // làm tốt ở lần ghé sau khi đã hứa sửa
+  HOST_PROMISE_BAD: -3,    // tái diễn đúng lỗi đã hứa sửa
+  HOST_PROMISE_SAT: 70,    // hài lòng tối thiểu để coi là giữ lời
+  HOST_TREND_CHANCE: 0.25, // khách mới có thể nhắc trend trong câu chào
+  HOST_DICE_BETS: [5000, 10000, 20000], // đồng tiền game mỗi lượt
+  HOST_DICE_HISTORY: 20,  // chỉ giữ kết quả gần nhất, không giới hạn lượt chơi
+  HOST_DICE_ANIMATION_MS: 1600,
+  HOST_DICE_COUNT: 3,
+  HOST_DICE_SIDES: 6,
+  HOST_DICE_SPLIT: 10,     // luật riêng: 3–10 Tài, 11–18 Xỉu
+  HOST_DICE_PAYOUT: 2,     // tổng tiền nhận khi thắng, đã gồm vốn cược
+  HOST_GAMBLE_RISK_ROUND: 4, // điểm nghi ngờ mỗi lượt chủ tự chơi
+  HOST_GAMBLE_RISK_MAX: 100,
+  HOST_GAMBLE_RISK_MONEY: 10000, // mỗi chừng này tiền cược thêm 1 điểm
+  HOST_GAMBLE_WARN: 20,
+  HOST_GAMBLE_RAID_RATE: 0.008, // xác suất mỗi lượt chủ chơi / giờ trong ca, trên mỗi điểm vượt ngưỡng
+  HOST_GAMBLE_RAID_MAX: 0.6,
+  HOST_GAMBLE_DECAY: 12,  // điểm giảm sau một ngày không có cược mới
+  HOST_GAMBLE_FINE: 50000,
+  HOST_GAMBLE_FINE_RATE: 0.15, // tỷ lệ tiền cao nhất trong ngày có hoạt động
+  HOST_GAMBLE_ORG_FINE: 100000,
+  HOST_GAMBLE_ORG_RATE: 0.3,
+  HOST_GAMBLE_INVITE_RISK: 8,
+  HOST_GAMBLE_CUSTOMER_RISK: 6,
+  HOST_GAMBLE_ACCEPT: 0.45,
+  HOST_GAMBLE_BUDGETS: [10000, 20000, 40000], // ngân sách riêng mỗi lượt ghé của khách
+  HOST_GAMBLE_STAKE_RATE: 0.5,
+  HOST_GAMBLE_CUSTOMER_ROUNDS: 3, // mỗi khách chơi tối đa chừng này lượt một lần ghé
+  HOST_GAMBLE_INTERVAL: 1, // giờ game giữa hai lượt của khách
+  HOST_GAMBLE_TIP_CHANCE: 0.6,
+  HOST_GAMBLE_TIP_RATE: 0.15, // thưởng theo lãi ròng lượt thắng
+  HOST_GAMBLE_LOSS_HIT: -3,
 
   // Máy treo: mỗi sự cố chỉ trừ điểm có giới hạn
   BREAK_GIVEUP: 30,        // giây thật khách chịu ngồi chờ máy treo, quá thì bỏ về

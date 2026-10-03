@@ -207,7 +207,8 @@ function start({ shopName, prices, staffCount = 0, hot = '', hotName = '', decor
   // biển tên quán vẽ lại trên lớp tối (chỉ đúng khung biển) để neon luôn sáng rõ; màn TV cũng tự phát sáng
   Lr.sign.innerHTML = `<clipPath id="cSign"><rect x="194" y="6" width="372" height="58" rx="7"/></clipPath>
     <g clip-path="url(#cSign)">${A.awningSVG(shopName)}</g>${TV.screenSVG(hot, hotName)}`;
-  Lr.counter.innerHTML = `<g transform="translate(-316 -19) scale(.75)">${A.counterSVG()}</g>`;
+  Lr.counter.innerHTML = `<g transform="translate(-316 -19) scale(.75)">${A.counterSVG()}
+    <g data-gamble-sign="" display="none" transform="translate(1194 412)"><rect width="224" height="36" rx="3" fill="#FFFDF4" stroke="#A83226" stroke-width="3"/><text x="112" y="25" text-anchor="middle" font-size="22" font-weight="bold" fill="#A83226">CẤM CỜ BẠC</text></g></g>`;
   Lr.front.innerHTML = `<g class="dog-spot" data-hit="dog"></g>` + A.frameSVG() + A.awningSVG(shopName);
   Lr.night.innerHTML = `<rect class="ov-dusk" width="${A.VW}" height="${A.VH}" fill="#FFA464" opacity="0"/>
     <rect class="ov-night" width="${A.VW}" height="${A.VH}" fill="#20234F" opacity="0"/>
@@ -245,6 +246,7 @@ function hitInfo(target) {
 function fire(h) {
   if (!h) return handlers.empty && handlers.empty();
   if (h.kind === 'dog') { dog.awake = 2.6; say(58, 600, 'Gâu~ ♥', 'good'); return; }
+  if (h.kind === 'host') return handlers.host && handlers.host();
   if (h.kind === 'cust') return handlers.cust(h.id);
   if (h.kind === 'thief') return handlers.thief && handlers.thief();
   if (h.kind === 'bubble') return handlers.bubble(h.i);
@@ -590,6 +592,7 @@ function applyLight(t) {
 // view: { time, pcs, queue, selected, pick, cooking, paused, repairSeconds, dark }
 function frame(v, dt) {
   if (!svg || !Lr.wall) return;
+  Lr.counter.querySelector('[data-gamble-sign]').setAttribute('display', v.gamblingBanned ? 'inline' : 'none');
   lastView = v;
   if (v.paused) dt = 0;
   applyLight(v.time);
