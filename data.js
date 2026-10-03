@@ -68,6 +68,7 @@ const CONFIG = {
   STAFF_TRAIN_COST: 60000,
   STAFF_CLEAN_SECONDS: 4, // thời gian nhân viên lau một bàn
   STAFF_LOAD_PATIENCE: 30, // khách đã vào máy chờ chủ quán nạp giờ (giây thật)
+  STAFF_AUTO_LOAD_SECONDS: 2, // nhân viên đã đào tạo nạp một lượt, từng khách một (giây thật)
 
   QUEUE_MAX: 5,
   QUEUE_PATIENCE: 28,      // giây thật khách chịu đứng chờ ở cửa
@@ -101,6 +102,12 @@ const CONFIG = {
   SHY_FLASH: 3,            // giây bong bóng gọi món của khách rụt rè hiện rõ trước khi thu lại thành 💭
 
   SPAWN_BASE: 31,          // càng nhỏ khách tới càng dày
+  PACE_LINEAR_PCS: 3,      // từ máy thứ 4, lượng khách tăng chậm hơn
+  PACE_EXTRA_PC_MUL: 1.5,  // sức hút máy thêm = căn bậc hai số máy thêm × hệ số
+  PACE_MIN_SPAWN: 4,      // giây thật tối thiểu giữa hai lượt khách ở tốc độ ×1
+  PACE_TASK_MUL: 0.35,    // mỗi việc tồn giãn thêm chừng này lần khoảng cách khách
+  PACE_MAX_BUSY_MUL: 3,   // giới hạn giãn khách khi tồn việc
+  PACE_EVENT_REST: 10,    // giây thật không đón khách/sinh thêm ồn, mẹ gank sau sự kiện lớn
   HOT_MULT: 2.5,           // game đang hot được khách tìm nhiều gấp mấy lần
   LOST_LINGER: 4,          // giây thật khách hỏi game quán chưa có rồi bỏ đi
 
@@ -140,7 +147,7 @@ const CONFIG = {
   // Trộm linh kiện
   THIEF_FROM_DAY: 7,       // từ ngày này mới có trộm
   THIEF_DAY_CHANCE: 0.25,  // mỗi ngày: khả năng có một tên trộm ghé (có camera thì giảm một nửa)
-  THIEF_CATCH_SEC: 3,      // giây thật để bấm bắt kẻ trộm đang chạy ra cửa
+  THIEF_CATCH_SEC: 6,      // giây thật để bấm bắt kẻ trộm đang chạy ra cửa
   THIEF_CAM_SEC: 2,        // có camera: thêm chừng này giây
   THIEF_STAFF_CATCH: 0.4,  // có nhân viên: khả năng nhân viên tự tóm được
   THIEF_REWARD: 100000,    // giao công an: tiền thưởng

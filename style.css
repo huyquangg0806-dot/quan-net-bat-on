@@ -224,6 +224,11 @@ kbd { background: var(--panel2); border: 1px solid var(--line); border-radius: 5
 .dock-head { display: flex; align-items: baseline; justify-content: space-between; margin-top: 4px; }
 .dock-head h3, .dock-title { font-family: 'Baloo 2', 'Be Vietnam Pro', sans-serif; font-weight: 800; font-size: 19px; }
 /* nút đóng cửa, cửa cuốn, tua nhanh */
+.play-actions { flex: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 10px; background: #FFF6E3; border-top: 1px solid var(--line); }
+.play-actions .btn { min-height: 44px; padding: 8px 10px; font-size: 13px; }
+.play-actions .btn[hidden] { display: none; }
+.play-actions .door-ctl { margin-left: auto; }
+#screen-play .play-actions #btn-catch-thief { background: #C0392B; color: #fff; border-color: #C0392B; }
 .door-ctl { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; align-self: center; }
 .door-ctl .btn.small { padding: 5px 10px; font-size: 12.5px; }
 #screen-play #btn-close { background: #3B3561; color: #FFF6E3; border: 1px solid #2A2547; }
@@ -476,8 +481,9 @@ kbd { background: var(--panel2); border: 1px solid var(--line); border-radius: 5
 
 /* Màn rộng: đặt quầy thao tác cạnh cảnh cho đỡ phải cuộn */
 @media (min-width: 900px) and (min-aspect-ratio: 4/3) {
-  .play-col { width: min(100%, 1060px); display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(360px, 1fr); grid-template-rows: auto auto 1fr; }
-  .phud, .infra { grid-column: 1 / -1; }
+  .play-col { width: min(100%, 1060px); display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(360px, 1fr); grid-template-rows: auto auto auto 1fr; }
+  .phud, .infra, .play-actions { grid-column: 1 / -1; }
+  .play-actions { grid-row: 3; }
   .scene-wrap { align-self: start; top: 48px; box-shadow: none; }
   #scene { max-height: calc(100vh - 60px); }
   .dock { border-top: 0; border-left: 4px solid #A86F45; min-height: calc(100vh - 48px); }
@@ -920,9 +926,9 @@ body:has(.modal-overlay) #fx-layer { visibility: hidden; }
 @media not all and (min-width: 900px) and (min-aspect-ratio: 4/3) {
   #screen-play.active { height: 100vh; height: 100dvh; min-height: 0; overflow: hidden; }
   #screen-play .play-col { height: 100%; min-height: 0; overflow: hidden; }
-  #screen-play .phud { flex: none; position: relative; top: auto; height: 44px; padding: 6px 6px; gap: 4px; }
+  #screen-play .phud { flex: none; flex-wrap: wrap; position: relative; top: auto; height: auto; min-height: 44px; padding: 6px 6px; gap: 4px; }
   #screen-play .ppill { padding: 3px 7px; gap: 3px; }
-  #screen-play .phud-sp { min-width: 0; }
+  #screen-play .phud-sp { display: none; }
   #screen-play .infra { flex: none; position: relative; top: auto; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 4px 8px; }
   #screen-play .infra::-webkit-scrollbar { display: none; }
   #screen-play .scene-wrap { flex: none; position: relative; top: auto; }
@@ -972,9 +978,10 @@ body:has(.modal-overlay) #fx-layer { visibility: hidden; }
   #screen-play .cook-go .btn.hold { flex: 0 0 auto; width: auto; padding: 10px 12px; font-size: 15px; }
   #screen-play .pour-area { gap: 10px; margin-top: 6px; }
   #screen-play .fill.vertical { width: 58px; height: 96px; }
-  #screen-play .dock-actions .btn { white-space: nowrap; min-width: 0; }
-  #screen-play .dock-actions .btn.ghost { padding: 9px 8px; font-size: 12.5px; }
-  #screen-play .dock-actions .btn.primary { padding: 10px 8px; }
+  #screen-play .dock-actions { flex-wrap: wrap; }
+  #screen-play .dock-actions .btn { white-space: normal; min-width: 0; min-height: 44px; }
+  #screen-play .dock-actions .btn.ghost { flex: 1 1 0; padding: 9px 8px; font-size: 12.5px; }
+  #screen-play .dock-actions .btn.primary { flex: 1 1 100%; padding: 10px 8px; }
   #screen-play .ticket-items .it { font-size: 15px; }
 }
 
