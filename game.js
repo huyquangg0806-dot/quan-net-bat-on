@@ -178,7 +178,9 @@ function normalizeSave() {
   for (const k in ITEMS) {
     if (S.unlocked[k] == null) S.unlocked[k] = !ITEMS[k].unlockCost;
     if (!Array.isArray(S.inv[k])) S.inv[k] = [];
+    for (const b of S.inv[k]) if (!Number.isFinite(b.unitCost) || b.unitCost < 0) b.unitCost = ITEMS[k].packCost / ITEMS[k].pack;
   }
+  normalizeAccounts();
 }
 
 // ---------- Thư viện game ----------
@@ -208,6 +210,7 @@ function buyGame(id) {
   const g = GAMES[id];
   if (!g || S.installed[id] || S.money < g.cost) return;
   S.money -= g.cost;
+  recordBook('investment', g.cost);
   S.installed[id] = true;
   saveGame();
   renderPrep();
@@ -223,10 +226,10 @@ const nearShelf = k => Math.max(1, Math.round(ITEMS[k].shelf * C.NEAR_SHELF_RATI
 const nearCost = k => Math.round(ITEMS[k].packCost * (1 - C.NEAR_DISCOUNT) / 1000) * 1000;
 function invCount(k) { return S.inv[k].reduce((s, b) => s + b.qty, 0); }
 function expiredCount(k) { return S.inv[k].reduce((s, b) => s + (daysPast(b) > 0 ? b.qty : 0), 0); }
-function addStock(k, qty, shelf = ITEMS[k].shelf) {
+function addStock(k, qty, shelf = ITEMS[k].shelf, unitCost = ITEMS[k].packCost / ITEMS[k].pack) {
   const exp = S.day + shelf - 1;
-  const b = S.inv[k].find(x => x.exp === exp);
-  if (b) b.qty += qty; else S.inv[k].push({ qty, exp });
+  const b = S.inv[k].find(x => x.exp === exp && x.unitCost === unitCost);
+  if (b) b.qty += qty; else S.inv[k].push({ qty, exp, unitCost });
   S.inv[k].sort((a, b2) => a.exp - b2.exp);
 }
 // Lấy hàng cũ nhất trước. Trả về số ngày đã quá hạn (0 = còn hạn), hoặc null nếu hết hàng.
@@ -234,6 +237,7 @@ function invTake(k) {
   const list = S.inv[k];
   if (!list.length) return null;
   const past = Math.max(0, daysPast(list[0]));
+  recordBook('materials', list[0].unitCost);
   list[0].qty--;
   if (list[0].qty <= 0) list.shift();
   return past;
@@ -241,8 +245,257 @@ function invTake(k) {
 // Bỏ hàng hết date; trả về số lượng đã bỏ
 function removeExpired(k) {
   const n = expiredCount(k);
+  for (const b of S.inv[k]) if (daysPast(b) > 0) discardStock(k, b);
   S.inv[k] = S.inv[k].filter(b => daysPast(b) <= 0);
   return n;
+}
+
+// ---------- Sổ sách 5 ngày, kế toán và thuế ----------
+const emptyBook = () => ({ revenue: 0, refunds: 0, materials: 0, operating: 0, investment: 0, assetSales: 0,
+  salvage: 0, wasteCost: 0, wasteQty: 0, nightCost: 0 });
+const accountantActive = (day = S.day) => day < S.accountant.until;
+const bookProfit = b => b.revenue + b.salvage - b.refunds - b.materials - b.operating;
+const taxFor = profit => Math.floor(Math.min(Math.max(0, profit - C.TAX_FREE), C.TAX_UPPER - C.TAX_FREE) * C.TAX_RATE
+  + Math.max(0, profit - C.TAX_UPPER) * C.TAX_HIGH_RATE);
+const taxTotal = () => S.taxes.reduce((n, t) => n + t.base + t.fee, 0);
+function normalizeAccounts() {
+  // Bản cũ bắt đầu kỳ mới ngay ngày hiện tại; không đoán doanh thu quá khứ.
+  S.books = S.books || { from: S.day, days: 0, free: true, period: emptyBook(), pending: emptyBook(), reports: [] };
+  const nonnegative = n => Number.isFinite(n) && n >= 0 ? n : 0;
+  const validDay = n => Number.isInteger(n) && n >= 1;
+  if (!validDay(S.books.from)) S.books.from = S.day;
+  if (!Number.isInteger(S.books.days) || S.books.days < 0 || S.books.days >= C.ACCOUNT_DAYS) S.books.days = 0;
+  S.books.free = S.books.free !== false;
+  S.books.period = { ...emptyBook(), ...S.books.period };
+  S.books.pending = { ...emptyBook(), ...S.books.pending };
+  for (const k of Object.keys(emptyBook())) {
+    S.books.period[k] = nonnegative(S.books.period[k]);
+    S.books.pending[k] = nonnegative(S.books.pending[k]);
+  }
+  S.books.reports = Array.isArray(S.books.reports) ? S.books.reports.slice(0, C.ACCOUNT_HISTORY) : [];
+  S.books.reports = S.books.reports.filter(r => r && validDay(r.from) && validDay(r.to)).map(r => {
+    const report = { ...r };
+    for (const k of Object.keys(emptyBook())) report[k] = nonnegative(report[k]);
+    report.profit = bookProfit(report);
+    report.tax = nonnegative(report.tax);
+    report.net = report.profit - report.tax;
+    return report;
+  });
+  S.taxes = (Array.isArray(S.taxes) ? S.taxes : []).filter(t => t && Number.isFinite(t.base) && t.base > 0 && validDay(t.dueDay));
+  for (const t of S.taxes) {
+    t.fee = Math.min(nonnegative(t.fee), Math.floor(t.base * C.TAX_LATE_CAP));
+    t.to = validDay(t.to) ? t.to : S.day;
+  }
+  S.accountant = { until: 0, autoTax: false, minSale: null, ...S.accountant };
+  S.accountant.until = Math.floor(nonnegative(S.accountant.until));
+  S.accountant.autoTax = !!S.accountant.autoTax;
+  S.accountant.minSale = Number.isFinite(S.accountant.minSale) && S.accountant.minSale >= 0 ? Math.floor(S.accountant.minSale) : null;
+  S.waste = { nextId: 1, lots: [], quote: null, lastOfferDay: 0, ...S.waste };
+  S.waste.lots = (Array.isArray(S.waste.lots) ? S.waste.lots : []).filter(b => b && ITEMS[b.k] && Number.isInteger(b.qty) && b.qty > 0
+    && Number.isInteger(b.id) && b.id > 0 && validDay(b.day) && Number.isFinite(b.unitCost) && b.unitCost >= 0
+    && ['pack', 'cooked'].includes(b.kind));
+  S.waste.nextId = Math.max(1, Math.floor(nonnegative(S.waste.nextId)), ...S.waste.lots.map(b => b.id + 1));
+  S.waste.lastOfferDay = Math.floor(nonnegative(S.waste.lastOfferDay));
+  S.waste.removed = nonnegative(S.waste.removed);
+  const q = S.waste.quote;
+  if (q && (!validDay(q.day) || !Array.isArray(q.ids) || !Number.isFinite(q.price) || q.price < 0
+    || !['offer', 'sold', 'withdrawn'].includes(q.status))) S.waste.quote = null;
+  if (S.waste.quote && !['raised', 'held', 'withdrawn'].includes(S.waste.quote.result)) delete S.waste.quote.result;
+}
+function recordBook(key, amount) {
+  S.books.pending[key] += amount;
+}
+function hireAccountant() {
+  if (accountantActive() || S.money < C.ACCOUNT_FEE || (R && !R.over)) return;
+  S.money -= C.ACCOUNT_FEE;
+  S.accountant.until = S.day + C.ACCOUNT_DAYS;
+  saveGame();
+  renderPrep();
+}
+function payTax() {
+  const total = taxTotal();
+  if (!total || S.money < total || (R && !R.over)) return false;
+  S.money -= total;
+  S.taxes = [];
+  saveGame();
+  renderPrep();
+  return true;
+}
+function autoPayTax(day, news) {
+  const total = taxTotal();
+  if (!accountantActive(day) || !S.accountant.autoTax || !total || S.money < total) return;
+  S.money -= total;
+  S.taxes = [];
+  news.push(['note', `✅ Kế toán đã đóng ${money(total)} tiền thuế và phạt trễ (nếu có).`]);
+}
+function finishAccounts(day, led, costs, books) {
+  const pending = S.books.pending;
+  pending.revenue += led.hours + led.food + led.tips + (led.thiefCash || 0);
+  pending.refunds += led.refund + led.closeRefund;
+  const fee = accountantActive(day) ? C.ACCOUNT_FEE / C.ACCOUNT_DAYS : 0;
+  pending.operating += Object.values(costs).reduce((n, v) => n + v, 0) + books.interest + led.fine + books.lateFee + fee;
+  pending.nightCost += costs.nightWage + costs.lights;
+  led.materials = pending.materials;
+  led.prepCosts = pending.operating - Object.values(costs).reduce((n, v) => n + v, 0) - books.interest - led.fine;
+  led.salvage = pending.salvage;
+  led.wasteQty = pending.wasteQty;
+  for (const k in pending) S.books.period[k] += pending[k];
+  S.books.days++;
+  autoPayTax(day, books.news);
+  // Mỗi khoản giữ hạn riêng; phạt trên gốc, không phạt chồng lên tiền phạt.
+  for (const t of S.taxes) {
+    const target = Math.floor(t.base * Math.min(C.TAX_LATE_CAP, Math.max(0, day - t.dueDay) * C.TAX_LATE_RATE));
+    if (target > t.fee) books.news.push(['warn', `⏰ Thuế kỳ ngày ${t.to} trễ hạn, cộng ${money(target - t.fee)} tiền phạt.`]);
+    t.fee = Math.max(t.fee, target);
+  }
+  if (S.books.days >= C.ACCOUNT_DAYS) {
+    const report = { ...S.books.period, from: S.books.from, to: day, free: S.books.free };
+    report.profit = bookProfit(report);
+    report.tax = report.free ? 0 : taxFor(report.profit);
+    report.net = report.profit - report.tax;
+    S.books.reports.unshift(report);
+    S.books.reports = S.books.reports.slice(0, C.ACCOUNT_HISTORY);
+    if (report.tax) S.taxes.push({ to: day, base: report.tax, fee: 0, dueDay: S.day + C.TAX_GRACE - 1 });
+    books.report = report;
+    books.news.push(['note', `📒 Đã chốt sổ ngày ${report.from}–${day}: lãi trước thuế ${money(report.profit)}${report.free ? ' · kỳ đầu miễn thuế' : ` · thuế ${money(report.tax)}`}.`]);
+    S.books.from = S.day;
+    S.books.days = 0;
+    S.books.free = false;
+    S.books.period = emptyBook();
+    autoPayTax(day, books.news);
+  }
+  S.books.pending = emptyBook();
+}
+function currentBook() {
+  const b = emptyBook();
+  for (const k in b) b[k] = S.books.period[k] + S.books.pending[k];
+  return b;
+}
+const expectedTax = () => S.books.free ? 0 : taxFor(bookProfit(currentBook()));
+const reservedMoney = () => S.bill.rent + S.bill.net + S.bill.power + dueTotal() + taxTotal() + expectedTax();
+function accountAdvice(b) {
+  if (bookProfit(b) < 0) return ACCOUNT_LINES.loss;
+  if (b.wasteCost > 0) return ACCOUNT_LINES.waste;
+  if (b.nightCost > 0) return ACCOUNT_LINES.night;
+  return ACCOUNT_LINES.calm;
+}
+function reportHTML(b) {
+  const row = (name, value) => `<div class="sum-row"><span>${name}</span><b>${money(value)}</b></div>`;
+  return `<div class="account-report">${row('Doanh thu sau hoàn tiền', b.revenue + b.salvage - b.refunds)}
+    ${row('Giá vốn nguyên liệu', b.materials)}${row('Chi phí vận hành', b.operating)}
+    ${row('Lợi nhuận trước thuế', b.profit)}${row(b.free ? 'Thuế (kỳ đầu miễn)' : 'Thuế kỳ này', b.tax)}
+    ${row('Lợi nhuận sau thuế', b.net)}${row('Tiền đầu tư riêng', b.investment)}${row('Thu thanh lý máy riêng', b.assetSales)}
+    <p class="muted small">Thu hồi đồ thải: ${money(b.salvage)} · giá vốn đồ bỏ: ${money(b.wasteCost)} (đã nằm trong giá vốn).</p></div>`;
+}
+function accountsHTML() {
+  const b = currentBook(), active = accountantActive(), latest = S.books.reports[0];
+  return `<div class="account-box"><h3>📒 Sổ sách & thuế</h3>
+    <p>Ngày ${S.books.from}–${S.books.from + C.ACCOUNT_DAYS - 1} · chốt sau <b>${C.ACCOUNT_DAYS - S.books.days} ngày</b>${S.books.free ? ' · kỳ đầu miễn thuế' : ''}.</p>
+    <div class="sum-row"><span>Lãi trước thuế đang ghi nhận</span><b>${money(bookProfit(b))}</b></div>
+    <div class="sum-row"><span>Thuế dự kiến theo số đã ghi</span><b>${money(expectedTax())}</b></div>
+    <div class="sum-row"><span>Dự phòng hóa đơn & thuế</span><b>${money(reservedMoney())}</b></div>
+    <div class="sum-row total"><span>Tiền có thể dùng sau dự phòng</span><b>${money(S.money - reservedMoney())}</b></div>
+    <p class="muted small">Số dự phòng chưa gồm tiền gốc vay và chi phí tương lai. Thuế hư cấu: miễn ${money(C.TAX_FREE)} đầu, phần tới ${money(C.TAX_UPPER)} chịu ${C.TAX_RATE * 100}%, phần vượt chịu ${C.TAX_HIGH_RATE * 100}%.</p>
+    ${S.taxes.map(t => `<p class="${S.day > t.dueDay ? 'bad-text' : 'warn-text'}">Thuế kỳ ngày ${t.to}: <b>${money(t.base + t.fee)}</b> · hạn hết ngày ${t.dueDay}${t.fee ? ` · phạt ${money(t.fee)}` : ''}.</p>`).join('')}
+    ${taxTotal() ? `<button class="btn small primary" data-pay-tax ${S.money < taxTotal() ? 'disabled' : ''}>Đóng thuế · ${money(taxTotal())}</button>` : '<p class="muted small">Không có thuế đang nợ.</p>'}
+    <p class="muted small">Trễ hạn: ${C.TAX_LATE_RATE * 100}% thuế gốc/ngày, tổng phạt tối đa ${C.TAX_LATE_CAP * 100}%. Không tính phạt chồng.</p>
+    <h4>🧮 Kế toán thuê ngoài</h4>
+    ${active ? `<p>Hợp đồng còn ${S.accountant.until - S.day} ngày · phí đã trả trước.</p>
+      <p class="account-advice">${accountAdvice(latest || b)}</p>`
+      : `<p>Thuê ${C.ACCOUNT_DAYS} ngày, trả trước ${money(C.ACCOUNT_FEE)}. Phí tính dần vào chi phí mỗi ngày; không tự gia hạn.</p>
+      <button class="btn small" data-hire-accountant ${S.money < C.ACCOUNT_FEE ? 'disabled' : ''}>${S.accountant.until ? 'Gia hạn' : 'Thuê kế toán'} · ${money(C.ACCOUNT_FEE)}</button>`}
+    <label class="account-option"><input type="checkbox" data-auto-tax ${S.accountant.autoTax ? 'checked' : ''} ${active ? '' : 'disabled'}> Nhờ kế toán tự đóng thuế cuối ngày khi đủ tiền</label>
+    <p class="muted small">Tiền vay và trả gốc không tính vào lãi. Đầu tư máy/nâng cấp không giảm lãi tính thuế. Giá vốn kho cũ ước theo giá nhập chuẩn.</p>
+    ${S.books.reports.map(r => `<details><summary>Báo cáo ngày ${r.from}–${r.to} · sau thuế ${money(r.net)}</summary>${reportHTML(r)}</details>`).join('')}
+    </div>`;
+}
+
+// ---------- Kho đồ thải và thương lượng thu gom ----------
+const wasteCount = () => S.waste.lots.reduce((n, b) => n + b.qty, 0);
+function addWaste(k, qty, unitCost, kind) {
+  if (!qty) return;
+  recordBook('wasteQty', qty);
+  recordBook('wasteCost', qty * unitCost);
+  if (R) R.led.wasteQty = (R.led.wasteQty || 0) + qty;
+  const kept = Math.min(qty, Math.max(0, C.WASTE_CAP - wasteCount()));
+  if (kept) S.waste.lots.push({ id: S.waste.nextId++, k, qty: kept, unitCost, kind, day: S.day });
+  if (kept < qty) S.waste.removed = (S.waste.removed || 0) + qty - kept;
+}
+function discardStock(k, b) {
+  recordBook('materials', b.qty * b.unitCost);
+  addWaste(k, b.qty, b.unitCost, 'pack');
+}
+function discardTray(o) {
+  if (!o || trayEmpty(o.tray)) return;
+  for (const [k, qty] of Object.entries(o.tray.items)) {
+    const cost = o.tray.costs?.[k] ?? qty * ITEMS[k].packCost / ITEMS[k].pack;
+    addWaste(k, qty, cost / qty, 'cooked');
+  }
+  o.tray = newTray();
+}
+function pruneWaste() {
+  const expired = S.waste.lots.filter(b => S.day - b.day >= C.WASTE_KEEP_DAYS);
+  S.waste.removed = (S.waste.removed || 0) + expired.reduce((n, b) => n + b.qty, 0);
+  S.waste.lots = S.waste.lots.filter(b => S.day - b.day < C.WASTE_KEEP_DAYS);
+  if (S.waste.quote && S.waste.quote.day !== S.day) S.waste.quote = null;
+}
+function ensureWasteQuote() {
+  pruneWaste();
+  if (S.waste.lastOfferDay === S.day || !wasteCount()) return;
+  const value = S.waste.lots.reduce((n, b) => n + b.qty * b.unitCost * (b.kind === 'pack' ? C.WASTE_PACK_RATIO : C.WASTE_COOKED_RATIO), 0);
+  S.waste.quote = { day: S.day, ids: S.waste.lots.map(b => b.id), price: Math.floor(value), status: 'offer', negotiated: false };
+  S.waste.lastOfferDay = S.day;
+  saveGame();   // lời chào thuộc đúng lô, tải lại cũng không quay giá
+}
+function sellWaste() {
+  const q = S.waste.quote;
+  if (!q || q.day !== S.day || q.status !== 'offer' || (R && !R.over)) return false;
+  const lots = S.waste.lots.filter(b => q.ids.includes(b.id));
+  if (lots.length !== q.ids.length) return false;
+  S.money += q.price;
+  recordBook('salvage', q.price);
+  S.waste.lots = S.waste.lots.filter(b => !q.ids.includes(b.id));
+  q.status = 'sold';
+  saveGame();
+  return true;
+}
+function bargainWaste() {
+  const q = S.waste.quote;
+  if (!accountantActive() || !q || q.day !== S.day || q.status !== 'offer' || q.negotiated || (R && !R.over)) return;
+  q.negotiated = true;
+  const roll = Math.random();
+  if (roll < C.WASTE_BARGAIN_CHANCE) { q.price = Math.floor(q.price * (1 + C.WASTE_BARGAIN_BONUS)); q.result = 'raised'; }
+  else if (roll < C.WASTE_BARGAIN_CHANCE + C.WASTE_KEEP_CHANCE) q.result = 'held';
+  else { q.status = 'withdrawn'; q.result = 'withdrawn'; }
+  saveGame();
+  autoSellWaste();
+  renderPrep();
+}
+function autoSellWaste() {
+  const q = S.waste.quote;
+  if (!accountantActive() || S.accountant.minSale == null || !q || q.status !== 'offer' || q.price < S.accountant.minSale) return false;
+  return sellWaste();
+}
+function wasteHTML() {
+  const q = S.waste.quote, active = accountantActive();
+  const group = kind => S.waste.lots.filter(b => b.kind === kind).reduce((n, b) => n + b.qty, 0);
+  return `<div class="account-box"><h3>♻️ Kho đồ thải</h3><p><b>${wasteCount()}/${C.WASTE_CAP}</b> đơn vị · giữ tối đa ${C.WASTE_KEEP_DAYS} ngày.</p>
+    <p>Nguyên gói: ${group('pack')} · đồ đã chế biến: ${group('cooked')}.</p>
+    <p class="muted small">Kho riêng để thu hồi/xử lý, không đưa lại cho khách. Đồ quá hạn hoặc vượt sức chứa được chuyển xử lý, không ghi giá vốn lần hai.</p>
+    ${S.waste.removed ? `<p class="warn-text">Đã chuyển xử lý ${S.waste.removed} đơn vị quá hạn hoặc vượt sức chứa.</p>` : ''}
+    ${S.waste.lots.length ? `<details><summary>Xem các lô đồ thải</summary>${S.waste.lots.map(b => `<p>${ITEMS[b.k].icon} ${ITEMS[b.k].name} ×${b.qty} · ${b.kind === 'pack' ? 'nguyên gói' : 'đã chế biến'} · còn ${C.WASTE_KEEP_DAYS - (S.day - b.day)} ngày.</p>`).join('')}</details>` : ''}
+    ${q ? `<h4>${ACCOUNT_LINES.buyer}</h4><p class="muted small">${ACCOUNT_LINES.offer}</p>
+      ${q.result ? `<p role="status">${ACCOUNT_LINES[q.result]}</p>` : ''}
+      ${q.status === 'offer' ? `<p>Giá cả lô đã chào: <b>${money(q.price)}</b>. Đồ mới gom chờ lượt ngày mai.</p>
+        <div class="account-actions"><button class="btn small primary" data-sell-waste>Bán ngay · ${money(q.price)}</button>
+        <button class="btn small" data-bargain-waste ${!active || q.negotiated ? 'disabled' : ''}>Nhờ kế toán trả giá</button></div>
+        <p class="muted small">Có thể giữ lại chờ ngày mai. Trả giá một lần: ${C.WASTE_BARGAIN_CHANCE * 100}% tăng ${C.WASTE_BARGAIN_BONUS * 100}%, ${C.WASTE_KEEP_CHANCE * 100}% giữ giá, còn lại rút lời chào.</p>`
+      : `<p>${q.status === 'sold' ? '✅ Đã bán lô này. Ngày mai có lượt thu gom mới.' : 'Chưa bán được. Ngày mai có lượt thu gom mới.'}</p>`}`
+      : `<p class="muted small">${wasteCount() ? 'Ngày mai có lượt thu gom mới.' : 'Chưa có đồ thải. Hàng bỏ và khay đổ sẽ được gom vào đây.'}</p>`}
+    <label class="account-option">Nhờ tự bán nếu giá cả lô từ (đồng)
+      <input type="number" min="0" step="100" inputmode="numeric" data-min-sale placeholder="Để trống: tự quyết"
+        value="${S.accountant.minSale ?? ''}" ${active ? '' : 'disabled'}></label>
+    <p class="muted small">Cần hợp đồng kế toán còn hạn. Để trống để tắt tự bán; thu hồi chỉ được phần nhỏ giá vốn.</p></div>`;
 }
 
 // ---------- Màn hình & modal ----------
@@ -692,6 +945,7 @@ function buyUpgrade(id) {
   const u = allUpgrades().find(x => x.id === id);
   if (!u || !upgradeState(u).ok) return;
   S.money -= u.cost;
+  recordBook('investment', u.cost);
   if (id.startsWith('unlock:')) S.unlocked[id.slice(7)] = true;
   else S.upgrades[id] = true;
   SFX.play('levelUp');
@@ -704,6 +958,7 @@ function buyUpgrade(id) {
 function buyMachine() {
   if (S.machines.length >= C.MAX_PCS || S.money < C.PC_COST) return;
   S.money -= C.PC_COST;
+  recordBook('investment', C.PC_COST);
   S.machines.push(newMachine());
   SFX.play('coin');
   saveGame();
@@ -716,6 +971,7 @@ function buyPart(i, k) {
   if (S.money < cost) return;
   const tierBefore = machineTier(m);
   S.money -= cost;
+  recordBook('investment', cost);
   m[k]++;
   if (m.missing === k) m.missing = null;   // mua đồ mới cấp cao hơn thì khỏi mua lại đồ bị trộm
   saveGame();
@@ -733,6 +989,7 @@ function fixWear(i, full) {
   const cost = full ? replaceCost(m) : C.FIX_CHEAP;
   if (m.wear >= 100 || S.money < cost) return;
   S.money -= cost;
+  recordBook('operating', cost);
   m.wear = full ? 100 : Math.min(100, m.wear + C.FIX_CHEAP_GAIN);
   saveGame();
   renderPrep();
@@ -744,6 +1001,7 @@ function restockPart(i) {
   const m = S.machines[i], cost = restockCost(m);
   if (!m.missing || S.money < cost) return;
   S.money -= cost;
+  recordBook('investment', cost);
   m.missing = null;
   SFX.play('coin');
   saveGame();
@@ -756,6 +1014,7 @@ function sellValue(m) {
 }
 function sellMachine(i) {
   if (S.machines.length <= 1) return;
+  recordBook('assetSales', sellValue(S.machines[i]));
   S.money += sellValue(S.machines[i]);
   S.machines.splice(i, 1);
   // máy quen của khách quen dịch theo số thứ tự mới
@@ -880,7 +1139,7 @@ function buyStock(k, near) {
   const cost = near ? nearCost(k) : it.packCost;
   if (!S.unlocked[k] || S.money < cost) return;
   S.money -= cost;
-  addStock(k, it.pack, near ? nearShelf(k) : it.shelf);
+  addStock(k, it.pack, near ? nearShelf(k) : it.shelf, cost / it.pack);
   saveGame();
   renderPrep();
 }
@@ -1001,6 +1260,7 @@ function trainStaff(id) {
   const p = staffById(id);
   if (!p || p.trained || S.money < C.STAFF_TRAIN_COST) return;
   S.money -= C.STAFF_TRAIN_COST;
+  recordBook('operating', C.STAFF_TRAIN_COST);
   p.trained = true;
   saveGame(); renderPrep();
 }
@@ -1018,6 +1278,8 @@ function askFireStaff(id) {
     ] });
 }
 function renderPrep() {
+  ensureWasteQuote();
+  autoSellWaste();
   renderMorning();
   renderShopName();
   renderMaps();
@@ -1072,6 +1334,8 @@ function renderPrep() {
     (S.pendingPolice || S.pendingKid ? `<p class="bad-text">👮 Hôm qua có người báo công an — sáng nay công an sẽ tới kiểm tra!</p>` : '') +
     (S.suspendDay === S.day ? '<p class="bad-text">🚫 Hôm nay quán bị đình chỉ vì mở quá giờ nhiều lần — không mở cửa được.</p>' : '') +
     billHTML() + netPlansHTML() + loansHTML();
+  $('#prep-accounts').innerHTML = accountsHTML();
+  $('#prep-waste').innerHTML = wasteHTML();
 }
 
 // ---------- Hóa đơn buổi sáng: thời tiết, lịch cúp điện, hóa đơn tuần, vay vốn ----------
@@ -1201,6 +1465,7 @@ function changeNet(id) {
   const fee = p.cap > netPlan().cap ? p.cost : 0;
   if (S.money < fee) return;
   S.money -= fee;
+  recordBook('investment', fee);
   S.net = id;
   saveGame();
   renderPrep();
@@ -1548,6 +1813,7 @@ function steal(pc) {
   const parts = Object.keys(C.THIEF_PARTS).filter(k => !(S.upgrades.cablelock && (k === 'mouse' || k === 'kb')));
   const part = weighted(parts, k => C.THIEF_PARTS[k]);
   if (modal && modal.pc === pc) closeModal();
+  discardTray(c.order);
   c.order = null;
   c.stole = part;
   pc.cust = null;
@@ -2158,6 +2424,7 @@ function cancelOrder(pc, reason) {
   const c = pc.cust;
   if (!c || !c.order) return;
   if (modal && modal.pc === pc) closeModal();
+  discardTray(c.order);
   c.order = null;
   if (reason === 'timeout') {
     hit(c, 'foodslow', -22, 'food', 'Chờ món quá lâu nên thôi không ăn');
@@ -2223,7 +2490,7 @@ function openKitchen(pc) {
     title: `🍳 Bếp — Máy ${pc.i + 1}`, body, cls: 'modal-kitchen', dock: true,
     actions: [
       { label: 'Hết món, xin lỗi 🙏', cls: 'ghost danger', onClick: () => cancelOrder(pc, 'sorry') },
-      { label: 'Đổ bỏ khay', cls: 'ghost', onClick: () => { o.tray = newTray(); render(); } },
+      { label: 'Đổ bỏ khay', cls: 'ghost', onClick: () => { discardTray(o); render(); } },
       { label: c.staffId ? 'Giao nhân viên mang ra 🧑‍🍳' : 'Mang ra 🚶', cls: 'primary', id: 'k-deliver', onClick: () => deliver(pc) },
     ],
   });
@@ -2294,9 +2561,12 @@ function openKitchen(pc) {
     const b = e.target.closest('[data-add]');
     if (!b || b.disabled) return;
     const k = b.dataset.add;
+    const cost = S.inv[k][0]?.unitCost;
     const past = invTake(k);
     if (past === null) return;
     o.tray.items[k] = (o.tray.items[k] || 0) + 1;
+    o.tray.costs = o.tray.costs || {};
+    o.tray.costs[k] = (o.tray.costs[k] || 0) + cost;
     if (past > 0) (o.tray.bad[k] = o.tray.bad[k] || []).push(past);
     render();
   });
@@ -2500,6 +2770,7 @@ function leave(pc, reason) {
     // khách rụt rè chưa dám nói món thì không phạt giờ chờ — chỉ là quán mất một đơn
     if (c.order.hidden) note(c, 'shyskip', -2, 'Muốn gọi đồ nhưng ngại, không dám gọi');
     else hit(c, 'foodslow', -15, 'food', 'Chưa nhận được món đã phải về');
+    discardTray(c.order);
     c.order = null;
   }
   if (reason === 'close' && c.remaining > 0.1) {
@@ -3088,7 +3359,7 @@ function endDay() {
     let nw = 0, sp = 0;
     S.inv[k] = S.inv[k].filter(b => {
       const p = daysPast(b);
-      if (p > C.EXPIRED_KEEP_DAYS) { sp += b.qty; return false; }
+      if (p > C.EXPIRED_KEEP_DAYS) { sp += b.qty; discardStock(k, b); return false; }
       if (p === 1) nw += b.qty;
       return true;
     });
@@ -3097,6 +3368,8 @@ function endDay() {
   }
   S.lastAsked = led.lost;
   pickHotGame();
+  pruneWaste();
+  finishAccounts(day, led, costs, books);
   const bankrupt = S.money < C.BANKRUPT_AT || books.evicted;
   // Phá sản không xóa bản lưu: giữ bản buổi sáng của ngày này để còn "Thử lại ngày này".
   if (!bankrupt) saveGame();
@@ -3107,6 +3380,7 @@ function endDay() {
 // Trả về { news: [[lớp, chữ]], interest, evicted }
 function closeBooks(day, costs) {
   const news = [];
+  let lateFee = 0;
   let evicted = false;
   autoPayBill(news);   // còn hóa đơn cũ chưa trả mà đủ tiền: trả luôn, khỏi bị phạt hay mất mặt bằng
   const d = S.dueBill;
@@ -3115,6 +3389,7 @@ function closeBooks(day, costs) {
     if (late > 0) {
       const fee = round1k(d.base * C.LATE_FEE);
       d.fee += fee;
+      lateFee += fee;
       news.push(['bad', `⏰ Hóa đơn đã trễ ${late} ngày, bị phạt thêm ${money(fee)}. Trả ở tab Hóa đơn sáng mai.`]);
       if (late >= C.CUT_AFTER && !S.netCut) {
         S.netCut = true;
@@ -3151,7 +3426,7 @@ function closeBooks(day, costs) {
     }
   } else S.sharkDays = 0;
   if (evicted) news.push(['bad', '🏚️ Nợ tiền mặt bằng quá lâu, chủ nhà lấy lại mặt bằng.']);
-  return { news, interest, evicted };
+  return { news, interest, evicted, lateFee };
 }
 
 // ---------- Bảng nhận xét cuối ngày ----------
@@ -3259,20 +3534,23 @@ function regularsLine() {
 function ledgerHTML(led, costs, interest) {
   const row = (l, v, cls = '') => `<div class="sum-row ${cls}"><span>${l}</span><b>${v}</b></div>`;
   const plus = n => '+' + money(n), minus = n => '-' + money(n);
-  const income = led.hours + led.food + led.tips + (led.thiefCash || 0);
+  const income = led.hours + led.food + led.tips + (led.thiefCash || 0) + (led.salvage || 0);
   const cash = [['🧑‍🍳 Lương nhân viên', costs.staff], ['🌙 Lương ca đêm', costs.nightWage], ['🛢️ Xăng máy phát', costs.fuel], ['💸 Hoàn tiền giờ vì cúp điện', led.refund],
     ['↩️ Hoàn tiền giờ khi đóng cửa', led.closeRefund], ['🚨 Tiền phạt', led.fine], ['🏦 Lãi vay', interest]]
     .filter(([, v]) => v);
   const billed = [['⚡ Điện chạy máy', costs.power], ['💡 Đèn biển hiệu buổi tối', costs.lights], ['❄️ Điện điều hòa', costs.acPower], ['🏠 Mặt bằng & bảo trì', costs.rent], ['📶 Tiền mạng', costs.net]]
     .filter(([, v], i) => v || i === 0 || i === 3);
   const out = [...cash, ...billed].reduce((s, [, v]) => s + v, 0);
-  const profit = income - out;
+  const materials = led.materials || 0, prep = led.prepCosts || 0;
+  const profit = income - out - materials - prep;
   const group = (title, sum, rows, cls) => `<details class="sum-group ${cls}"><summary>${row(title, sum, cls)}</summary>${rows}</details>`;
   return `<div class="sum-block">
-    ${group('💰 Thu', plus(income), row('⏱️ Tiền giờ chơi', plus(led.hours)) + row('🍜 Bán đồ ăn uống', plus(led.food)) + row('💝 Tiền tip', plus(led.tips)) + (led.thiefCash ? row('🦹 Thưởng / bắt đền trộm', plus(led.thiefCash)) : ''), 'up')}
-    ${cash.length ? group('💵 Chi tiền mặt', minus(cash.reduce((s, [, v]) => s + v, 0)), cash.map(([l, v]) => row(l, minus(v))).join(''), 'down') : ''}
+    ${group('💰 Thu', plus(income), row('⏱️ Tiền giờ chơi', plus(led.hours)) + row('🍜 Bán đồ ăn uống', plus(led.food)) + row('💝 Tiền tip', plus(led.tips)) + (led.thiefCash ? row('🦹 Thưởng / bắt đền trộm', plus(led.thiefCash)) : '') + (led.salvage ? row('♻️ Thu hồi đồ thải', plus(led.salvage)) : ''), 'up')}
+    ${cash.length ? group('💵 Chi phí & hoàn tiền', minus(cash.reduce((s, [, v]) => s + v, 0)), cash.map(([l, v]) => row(l, minus(v))).join(''), 'down') : ''}
     ${group('🧾 Ghi vào hóa đơn tuần', minus(billed.reduce((s, [, v]) => s + v, 0)), billed.map(([l, v]) => row(l, minus(v))).join(''), 'down')}
-    ${row(profit >= 0 ? 'Lãi hôm nay' : 'Lỗ hôm nay', (profit >= 0 ? '+' : '') + money(profit), 'total ' + (profit >= 0 ? 'up' : 'down'))}
+    ${row('🍳 Giá vốn nguyên liệu đã dùng/bỏ', minus(materials))}
+    ${prep ? row('🧮 Chi phí sáng, kế toán & phạt hóa đơn', minus(prep)) : ''}
+    ${row(profit >= 0 ? 'Lãi hôm nay trước thuế' : 'Lỗ hôm nay trước thuế', (profit >= 0 ? '+' : '') + money(profit), 'total ' + (profit >= 0 ? 'up' : 'down'))}
     <p class="muted small">Bấm vào từng nhóm để xem chi tiết. Hóa đơn tuần đang cộng dồn <b>${money(S.bill.rent + S.bill.net + S.bill.power)}</b>${S.bill.days ? `, chốt sau ${C.BILL_DAYS - S.bill.days} ngày` : ''}.</p>
   </div>`;
 }
@@ -3316,6 +3594,8 @@ function showSummary({ led, costs, books, newlyExpired, spoiled, day, bankrupt }
   const debt = S.loans.bank + S.loans.shark;
   const body = `
     ${ledgerHTML(led, costs, books.interest)}
+    ${books.report ? `<details class="account-box" open><summary>📒 Chốt kỳ ngày ${books.report.from}–${books.report.to}</summary>${reportHTML(books.report)}${accountantActive(day) ? `<p class="account-advice">${accountAdvice(books.report)}</p>` : ''}</details>` : ''}
+    ${led.wasteQty ? `<p class="note">♻️ Gom ${led.wasteQty} đơn vị đồ bỏ vào kho đồ thải (đầy kho thì chuyển xử lý).</p>` : ''}
     <div class="sum-stats">
       <div><b>${led.served}</b><span>khách phục vụ</span></div>
       <div><b>${led.walkouts}</b><span>khách bỏ về</span></div>
@@ -3330,7 +3610,7 @@ function showSummary({ led, costs, books, newlyExpired, spoiled, day, bankrupt }
     ${led.sick ? `<p class="warn">🤢 ${led.sick} khách bị đau bụng vì đồ hết date!</p>` : ''}
     ${(S.pendingPolice || S.pendingKid) && !bankrupt ? `<p class="warn">📞 Có người đã báo công an — sáng mai công an sẽ tới kiểm tra!</p>` : ''}
     ${newlyExpired.length ? `<p class="warn">☠️ Vừa hết date: ${itemList(newlyExpired)}. Sáng mai bỏ đi, hoặc giữ lại bán tiếp (khách có thể đau bụng!).</p>` : ''}
-    ${spoiled.length ? `<p class="warn">🗑️ Hư hẳn, phải bỏ: ${itemList(spoiled)}</p>` : ''}
+    ${spoiled.length ? `<p class="warn">♻️ Hư hẳn, chuyển sang kho đồ thải: ${itemList(spoiled)}</p>` : ''}
     <p>Tiền hiện có: <b class="${S.money < 0 ? 'neg' : ''}">${money(S.money)}</b>${S.dueBill ? ` · Hóa đơn chưa trả: <b class="neg">${money(dueTotal())}</b>` : ''}${debt ? ` · Đang vay: <b>${money(debt)}</b>` : ''}</p>
     ${bankrupt ? `<p class="warn">💸 ${books.evicted ? 'Mất mặt bằng' : 'Quán nợ quá nhiều'} nên phải đóng cửa. Bản lưu cũ vẫn còn: thử lại ngày ${day} (trả hóa đơn, vay thêm cho kịp) hoặc chơi lại từ đầu.</p>`
       : S.money < 0 ? `<p class="warn">⚠️ Bạn đang nợ! Nợ quá ${money(-C.BANKRUPT_AT)} là phá sản.</p>` : ''}`;
@@ -3364,6 +3644,8 @@ function openHowTo() {
       <li><b>🔧 Sự cố:</b> máy treo thì sửa ngay. Khách về rồi thì 🧹 dọn bàn trước khi xếp người mới.</li>
       <li><b>🏗️ Hạ tầng:</b> thanh dưới đồng hồ cho biết nhiệt độ phòng, mạng và điện. Trời nóng thì bật ❄️ điều hòa (tốn điện). Quán đông quá sức mạng thì khách bị giật lag — nâng gói mạng ở tab <i>Hóa đơn</i>. Cúp điện thì máy tắt: có 🔋 UPS khách kịp lưu game, có 🛢️ máy phát thì bấm nổ máy (tốn xăng). Khách thua hay đập phím, buổi sáng nhớ sửa.</li>
       <li><b>🧾 Tiền nong:</b> mặt bằng, mạng, điện cộng dồn và chốt hóa đơn mỗi 7 ngày — đủ tiền thì game tự trả khi chốt; thiếu tiền thì trễ hạn bị phạt rồi cắt mạng. Thiếu vốn thì vay ngân hàng (lãi thấp) hoặc vay nóng (lãi cao) ở tab <i>Hóa đơn</i>.</li>
+      <li><b>📒 Kế toán & thuế:</b> chốt sổ mỗi ${C.ACCOUNT_DAYS} ngày, kỳ đầu miễn thuế. Giá vốn ghi khi dùng/bỏ nguyên liệu; đầu tư máy không giảm lãi tính thuế. Tab <i>Hóa đơn</i> cho xem báo cáo, đóng thuế và thuê kế toán ${money(C.ACCOUNT_FEE)}/${C.ACCOUNT_DAYS} ngày để nhắc dự phòng, tự đóng thuế khi bật tùy chọn.</li>
+      <li><b>♻️ Đồ thải:</b> hàng bỏ và khay đổ gom riêng ở tab <i>Nhập hàng</i>, giữ ${C.WASTE_KEEP_DAYS} ngày, tối đa ${C.WASTE_CAP} đơn vị. Mỗi ngày một lời chào thu gom; bán ngay hoặc nhờ kế toán trả giá một lần (có thể bị rút lời chào). Có thể đặt giá tối thiểu để nhờ tự bán.</li>
       <li><b>🙋 Mỗi khách một kiểu:</b> để ý câu chào ở cửa. Khách <i>đang vội</i> chịu chờ ngắn hơn — xếp máy và làm món cho họ trước. Khách <i>ngại bẩn</i> rất khó chịu với bàn bừa và máy treo. Khách <i>tính kỹ</i> để ý từng phút nạp giờ. Trưa hay có dân văn phòng, chiều có học sinh, tối có game thủ đi rank.</li>
       <li><b>📢 Khách ồn ào:</b> có khách hay hát hò, la hét làm khách ngồi cùng hàng máy khó chịu. Thấy 📢 trên máy thì bấm vào: <i>nhắc nhở</i> (đa số chịu nhỏ tiếng, không được thì còn ồn hơn) hoặc <i>mời về</i> (phải trả lại tiền giờ, khách đó chấm sao thấp). Nhân viên cũng tự đi nhắc.</li>
       <li><b>🦹 Trộm:</b> thỉnh thoảng có kẻ trộm giả làm khách (nạp ít giờ, nói lấp lửng, ngồi một lúc thì lộ 👀). Khi nó gỡ đồ chạy ra cửa, bạn có vài giây để <i>bấm vào máy đó</i> bắt lại. Bắt được thì chọn giao công an (có thưởng), tha (thành khách quen) hay bắt đền. Để thoát thì máy thiếu đồ, sáng mai mua lại. Camera và khóa cáp giúp phòng trộm.</li>
@@ -3642,6 +3924,31 @@ function init() {
   });
   $('#prep-staff').addEventListener('change', e => {
     if (e.target.matches('[data-wage]')) setStaffWage(+e.target.dataset.wage, e.target.value);
+  });
+  $('#prep-accounts').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b || b.disabled) return;
+    if (b.dataset.hireAccountant != null) hireAccountant();
+    else if (b.dataset.payTax != null) payTax();
+  });
+  $('#prep-accounts').addEventListener('change', e => {
+    if (!e.target.matches('[data-auto-tax]') || !accountantActive()) return;
+    S.accountant.autoTax = e.target.checked;
+    saveGame();
+    renderPrep();
+  });
+  $('#prep-waste').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b || b.disabled) return;
+    if (b.dataset.sellWaste != null) { sellWaste(); renderPrep(); }
+    else if (b.dataset.bargainWaste != null) bargainWaste();
+  });
+  $('#prep-waste').addEventListener('change', e => {
+    if (!e.target.matches('[data-min-sale]') || !accountantActive()) return;
+    const raw = e.target.value.trim(), value = Number(raw);
+    S.accountant.minSale = raw && Number.isFinite(value) && value >= 0 ? Math.floor(value) : null;
+    saveGame();
+    renderPrep();
   });
   // nút ở thanh hạ tầng và thẻ khách được vẽ lại liên tục: bắt chạm lúc ấn xuống
   PlayScene.onTap($('#infra'), t => t.closest('[data-infra]'), b => {

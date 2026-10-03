@@ -1015,6 +1015,22 @@ body:has(.modal-overlay) #fx-layer { visibility: hidden; }
 /* ---------- Tab Hóa đơn: thời tiết, hóa đơn tuần, vay vốn ---------- */
 #prep-costs p { margin: 6px 0; }
 .staff-box { background: #FFF9E9; border: 2px solid #D9B98A; border-radius: 14px; padding: 10px; line-height: 1.5; }
+
+/* ---------- Sổ kế toán và kho đồ thải ---------- */
+.account-box { margin: 12px 0; padding: 12px; border: 2px solid #D9B98A; border-radius: 14px; background: #FFF9E9; line-height: 1.5; }
+.account-box h3, .account-box h4 { margin: 8px 0; }
+.account-box h3:first-child { margin-top: 0; }
+.account-box p { margin: 8px 0; }
+.account-box .sum-row { gap: 12px; align-items: flex-start; }
+.account-box .sum-row > span { min-width: 0; }
+.account-box .sum-row > b { flex-shrink: 0; }
+.account-box details { margin-top: 10px; border-top: 1px dashed #D9B98A; padding-top: 8px; }
+.account-box summary { cursor: pointer; font-weight: 700; }
+.account-advice { padding: 10px; background: #E7F1E4; border-radius: 10px; }
+.account-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.account-option { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0; font-size: 13px; }
+.account-option input[type="checkbox"] { width: 20px; height: 20px; accent-color: #137A70; }
+.account-option input[type="number"] { width: 100%; min-width: 0; padding: 10px; border: 1px solid #C9AE87; border-radius: 8px; background: #fff; font: inherit; }
 .staff-box > p { margin: 0 0 8px; }
 .staff-row { display: grid; gap: 7px; border-top: 1px dashed #D9B98A; padding: 10px 0; }
 .staff-row label { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; font-weight: 700; }

@@ -40,6 +40,27 @@ const CONFIG = {
   RENT_PER_PC: 5000,       // bảo trì mỗi máy mỗi ngày
   BANKRUPT_AT: -300000,
 
+  // Sổ sách, thuế hư cấu và kế toán thuê ngoài
+  ACCOUNT_DAYS: 5,             // số ngày mỗi kỳ báo cáo
+  ACCOUNT_HISTORY: 6,          // số báo cáo gần nhất được giữ
+  ACCOUNT_FEE: 60000,          // tiền thuê trả trước cho một hợp đồng 5 ngày
+  TAX_FREE: 500000,            // phần lợi nhuận được miễn mỗi kỳ
+  TAX_UPPER: 1500000,          // từ ngưỡng này trở lên áp dụng bậc cao
+  TAX_RATE: 0.1,
+  TAX_HIGH_RATE: 0.15,
+  TAX_GRACE: 2,               // số ngày được đóng sau khi chốt
+  TAX_LATE_RATE: 0.02,         // phạt mỗi ngày trễ, theo thuế gốc
+  TAX_LATE_CAP: 0.2,          // tổng phạt tối đa 20% thuế gốc
+
+  // Kho đồ thải: thu hồi một phần nhỏ giá vốn, không phục vụ lại cho khách
+  WASTE_CAP: 100,             // số đơn vị kho giữ được
+  WASTE_KEEP_DAYS: 5,
+  WASTE_PACK_RATIO: 0.1,
+  WASTE_COOKED_RATIO: 0.02,
+  WASTE_BARGAIN_CHANCE: 0.6,  // thương lượng: tăng giá / giữ giá / rút lời chào
+  WASTE_KEEP_CHANCE: 0.25,
+  WASTE_BARGAIN_BONUS: 0.25,
+
   STAFF_PCS: 3,           // mỗi nhân viên phụ trách tối đa 3 máy đang có khách
   STAFF_WAGE_DEFAULT: 50000,
   STAFF_WAGE_MIN: 30000,
@@ -238,6 +259,18 @@ const GAMES = {
   coso:    { name: 'Cờ Sờ 2',            icon: '💣', minTier: 2, cost: 180000, pop: 15, desc: 'Bắn súng đặt bom huyền thoại.' },
   tromxe:  { name: 'Trộm Xe 5',          icon: '🚗', minTier: 3, cost: 250000, pop: 16, desc: 'Thế giới mở, lái xe tung tăng. Game nặng.' },
   denring: { name: 'Đen Ring',           icon: '🗡️', minTier: 3, cost: 400000, pop: 12, desc: 'Game khó, chết hoài vẫn ham. Game nặng.' },
+};
+
+const ACCOUNT_LINES = {
+  calm: 'Tiền trong két chưa phải tiền tiêu được đâu chủ quán, mình còn hóa đơn đang chờ!',
+  waste: 'Kỳ này nguyên liệu bỏ đi hơi xót. Nhập ít hơn, gom đồ thải thu hồi chút vốn nhé.',
+  night: 'Có mở đêm thì nhớ nhìn cả tiền đèn và lương ca đêm, đừng chỉ nhìn tiền giờ.',
+  loss: 'Kỳ này đang lỗ. Mình chưa phải đóng thuế, nhưng nên xem lại giá vốn và chi phí.',
+  buyer: 'Chú Sáu thu gom',
+  offer: 'Chú nhận hàng thu hồi và đồ hữu cơ để xử lý, không bán lại cho khách ăn uống nha.',
+  raised: 'Kế toán gom đủ chứng từ, chú Sáu chịu nâng giá. Chốt được rồi đó!',
+  held: 'Chú Sáu bảo: “Giá này là hết cỡ rồi cháu ơi.” Lời chào vẫn còn.',
+  withdrawn: 'Chú Sáu lắc đầu rút lời chào. Ngày mai có lượt thu gom mới.',
 };
 
 // cat: base = nền tô mì, topping = cho vào tô, drink = đồ uống
