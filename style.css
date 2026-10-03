@@ -223,6 +223,14 @@ kbd { background: var(--panel2); border: 1px solid var(--line); border-radius: 5
 .dock.open .dock-door { display: none; }
 .dock-head { display: flex; align-items: baseline; justify-content: space-between; margin-top: 4px; }
 .dock-head h3, .dock-title { font-family: 'Baloo 2', 'Be Vietnam Pro', sans-serif; font-weight: 800; font-size: 19px; }
+/* nút đóng cửa, cửa cuốn, tua nhanh */
+.door-ctl { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; align-self: center; }
+.door-ctl .btn.small { padding: 5px 10px; font-size: 12.5px; }
+#screen-play #btn-close { background: #3B3561; color: #FFF6E3; border: 1px solid #2A2547; }
+#screen-play #btn-close.warn { background: var(--bad); border-color: var(--bad); }
+#screen-play #btn-shutter.on { background: #6B5B4B; color: #FFF6E3; }
+.speed-btn { width: auto; padding: 0 8px; border-radius: 99px; font-size: 12.5px; }
+.speed-btn.on { background: var(--accent); border-color: #137A70; color: #fff; }
 #screen-play #queue { display: flex; flex-direction: row; gap: 8px; overflow-x: auto; padding: 6px 2px 8px; scroll-snap-type: x proximity; }
 #screen-play .empty { flex: 1; border-color: var(--line); color: var(--muted); }
 #screen-play .cust {

@@ -81,6 +81,7 @@
         <div class="ppill">⭐ <b id="hud-rating"></b></div>
         <button class="icon-btn" data-action="sound">🔊</button>
         <button class="icon-btn" data-action="howto" aria-label="Cách chơi">?</button>
+        <button id="btn-speed" class="icon-btn speed-btn" aria-label="Tua nhanh">⏩1×</button>
         <button id="btn-pause" class="icon-btn" aria-label="Tạm dừng">⏸</button>
       </header>
       <div id="infra" class="infra" aria-label="Hạ tầng: nhiệt độ, điều hòa, mạng, điện"></div>
@@ -91,7 +92,12 @@
       </div>
       <div id="dock" class="dock">
         <div id="dock-door" class="dock-door">
-          <div class="dock-head"><h3>🚪 Cửa quán <span id="queue-count"></span></h3></div>
+          <div class="dock-head"><h3>🚪 Cửa quán <span id="queue-count"></span></h3>
+            <div class="door-ctl">
+              <button id="btn-shutter" class="btn small ghost" hidden>🚪 Kéo cửa cuốn</button>
+              <button id="btn-reopen" class="btn small ghost" hidden>↩️ Mở lại</button>
+              <button id="btn-close" class="btn small">🌙 Đóng cửa</button>
+            </div></div>
           <div id="queue"></div>
           <div id="floor-hint" class="dock-hint"></div>
           <button id="staff-task-btn" class="btn primary staff-task-btn" hidden></button>

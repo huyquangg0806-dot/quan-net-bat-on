@@ -3,8 +3,35 @@
 const CONFIG = {
   GAME_HOUR_MS: 15000,     // 1 giờ trong game = 15 giây thật
   OPEN_HOUR: 8,
-  LAST_ENTRY_HOUR: 21,     // sau giờ này không nhận khách mới
-  CLOSE_HOUR: 22,
+  MAX_OPEN_UNTIL: 32,      // mở muộn nhất tới 8h sáng hôm sau (giờ game chạy liên tục: 24 = 0h, 32 = 8h)
+  EVENT_END_HOUR: 21,      // cúp điện, trộm, công an kiểm tra hàng chỉ lên lịch trước giờ này
+
+  // Mở đêm & đóng cửa chủ động
+  LIGHTS_FROM: 18,            // từ giờ này quán bật đèn, biển hiệu...
+  LIGHTS_PER_HOUR: 3000,      // ...tốn chừng này mỗi giờ còn mở cửa (có khách hay không)
+  NIGHT_FROM: 22,             // sau giờ này tính lương ca đêm, nhân viên mệt
+  SHIFT_HOURS: 14,            // lương ngày trả cho ca 8h–22h
+  NIGHT_WAGE_MUL: 1.5,        // lương mỗi giờ ca đêm = lương ngày / SHIFT_HOURS × hệ số này
+  NIGHT_STAFF_TIRED: 2,       // ca đêm: nhân viên ghi sai đơn nhiều gấp mấy lần
+  CLOSE_HIT_PER_HOUR: 5,      // đóng cửa ngay: khách mất chừng này hài lòng mỗi giờ còn lại (đã hoàn tiền)
+  CLOSE_HIT_MAX: 15,
+  NIGHT_POLICE_FROM: 23,      // công an kiểm tra giờ giấc từ 23h...
+  NIGHT_POLICE_TO: 30,        // ...tới 6h sáng
+  NIGHT_POLICE_BASE: 0.04,    // mỗi giờ game mở trong khung này: khả năng bị kiểm tra
+  NIGHT_POLICE_PER_CUST: 0.015, // ...cộng thêm mỗi khách đang chơi
+  NIGHT_POLICE_NOISE: 2,      // đang có khách ồn: dễ bị hàng xóm báo
+  NIGHT_POLICE_KID: 2,        // có học sinh đang chơi
+  SHUTTER_POLICE_MUL: 0.3,    // kéo cửa cuốn: rủi ro còn chừng này
+  NIGHT_FINES: [0, 300000, 800000],   // lần 1 cảnh cáo, lần 2, lần 3 trở đi
+  NIGHT_SUSPEND_AT: 3,        // vi phạm lần thứ mấy thì bị đình chỉ ngày hôm sau
+  NIGHT_RATING_HIT: 0.15,     // từ lần 2: đánh giá giảm
+  NIGHT_STRIKE_RESET: 14,     // sạch chừng này ngày thì xóa số lần vi phạm
+  OVERNIGHT_FROM: 21,         // khách xin bao đêm từ giờ này...
+  OVERNIGHT_TO: 24,           // ...tới nửa đêm
+  OVERNIGHT_UNTIL: 30,        // bao đêm chơi tới 6h sáng
+  OVERNIGHT_CHANCE: 0.4,      // khách người lớn tới trong khung giờ đó: khả năng xin bao đêm
+  OVERNIGHT_PAY_HOURS: 5,     // giá bao đêm = chừng này giờ chơi
+  SPEEDS: [1, 2, 4],          // nút tua nhanh
 
   START_MONEY: 200000,
   MAX_PCS: 12,
@@ -287,6 +314,13 @@ const THIEF_LINES = [
   (t, h) => `${t} ${h}, máy nào khuất khuất chút nha em.`,
 ];
 
+// Khách xin bao đêm (t = loại máy, g = tên game)
+const OVERNIGHT_LINES = [
+  (t, g) => `Anh ơi cho em bao đêm ${t}, cày ${g} tới sáng!`,
+  (t, g) => `Bao đêm ${t} bao nhiêu anh? Tối nay em thức chơi ${g}.`,
+  (t, g) => `Cho em gói bao đêm nha, ${t}, em leo ${g} xuyên đêm.`,
+];
+
 // ---------- Tên quán gợi ý (nút 🎲) ----------
 const SHOP_NAME_IDEAS = [
   'Net Tèo', 'Hang Ổ Game Thủ', 'Net Cô Ba', 'Net 24h Không Ngủ', 'Tiệm Net Mì Tôm',
@@ -365,7 +399,7 @@ const REVIEW_LINES = {
     'Cả trường đang chơi {game}, may mà quán có cài.',
   ],
   closed: [
-    'Nạp giờ đàng hoàng mà 10h tối quán đuổi về. Trả lại tiền đây!',
+    'Đang chơi ngon thì quán đóng cửa cái rụp. Trả lại tiền thì cũng mất hứng.',
   ],
   bad: [
     'Trải nghiệm không vui lắm. Chắc không quay lại.',
@@ -564,7 +598,7 @@ const SEGMENTS = {
     },
   },
   rank: {
-    name: 'Game thủ đi rank', short: 'game thủ rank', base: 0.3, when: [[18, 22, 1.4], [13, 18, 0.6]],
+    name: 'Game thủ đi rank', short: 'game thủ rank', base: 0.3, when: [[18, 22, 1.4], [13, 18, 0.6], [22, 27, 1.2]],
     tiers: [1, 2, 3], hours: [2, 3, 3, 4], care: { pc: 1.7, wait: 0.9 },
     games: ['lmhb', 'valoran', 'coso', 'dotkit'],
     order: { chance: 0.75, drinks: ['coca', 'sting'] },
@@ -586,7 +620,7 @@ const SEGMENTS = {
     hints: { broken: 'Game thủ đi rank rất ngại máy treo: sửa ngay, và cân nhắc mua UPS.' },
   },
   hoainiem: {
-    name: 'Game thủ hoài niệm', short: 'game thủ hoài niệm', base: 0.15, when: [[19, 22, 0.6], [8, 11, 0.35]],
+    name: 'Game thủ hoài niệm', short: 'game thủ hoài niệm', base: 0.15, when: [[19, 22, 0.6], [8, 11, 0.35], [22, 25, 0.5]],
     tiers: [1, 2], hours: [2, 2.5, 3], care: { food: 1.2 },
     games: ['dotkit', 'audisan', 'cauca', 'coso'],
     order: { chance: 0.8, food: true, toppings: ['trung'], drinks: ['suoi', 'sting'] },
@@ -725,7 +759,7 @@ const CLAUSES = {
   outage: 'cúp điện mất trận đang chơi', dark: 'cúp điện ngồi chờ mãi', worn: 'phím chuột liệt nút',
   quickseat: 'được xếp máy ngay', wait: 'phải chờ máy khá lâu', walkout: 'chờ ở cửa quá lâu',
   dirty: 'bàn còn bẩn', cleanseat: 'bàn ghế sạch sẽ',
-  perfect: 'nạp giờ chuẩn', short: 'bị nạp thiếu giờ', bonus: 'được tặng thêm giờ', closed: 'chưa hết giờ quán đã đóng cửa',
+  perfect: 'nạp giờ chuẩn', short: 'bị nạp thiếu giờ', bonus: 'được tặng thêm giờ', closed: 'chưa hết giờ quán đã đóng cửa', overnight: 'được bao đêm giá hời',
   quick: 'nước ra nhanh', tasty: 'đồ ăn ngon, ra đúng món', foodslow: 'món ra chậm', missing: 'mang món ra thiếu', orderwrong: 'nhân viên ghi sai món',
   raw: 'mì còn sống', mushy: 'mì nấu nát', coffee: 'cà phê rót chưa chuẩn', outofstock: 'gọi món thì hết hàng',
   sick: 'bị đau bụng vì đồ ăn',
@@ -744,7 +778,7 @@ const HINTS = {
   walkout: 'Đón khách ở cửa trước, việc khác làm sau.',
   dirty: 'Bấm 🧹 dọn bàn trước khi xếp khách mới.',
   short: 'Thả tay đúng vạch vàng khi nạp giờ.',
-  closed: 'Gần giờ đóng cửa, đừng nhận khách nạp quá nhiều giờ.',
+  closed: 'Muốn đóng cửa thì bấm "Chuẩn bị đóng cửa" sớm cho khách chơi nốt, đừng đóng ngay.',
   foodslow: 'Làm món ngay khi khách gọi; đồ uống làm nhanh, ưu tiên trước.',
   missing: 'Đối chiếu phiếu gọi món trước khi mang ra.',
   orderwrong: 'Training nhân viên hoặc tăng lương ở tab Hóa đơn buổi sáng.',

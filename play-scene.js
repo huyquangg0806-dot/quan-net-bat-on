@@ -48,6 +48,7 @@ function stepGuests(v, dt) {
   for (const [id,g] of current) if(g.queue&&!previousGuests.has(id)&&!arrivals.has(id)) arrivals.set(id,{t:0});
   for (const [id,g] of previousGuests) if(!current.has(id)) {
     arrivals.delete(id);
+    if(g.c.stole) { addRunner(g.c, g.x, g.y); continue; }
     if(g.queue||g.visible) { const el=node('g',{'pointer-events':'none',class:'walking sc-departure'}); el.innerHTML='<g transform="scale(.92)">'+A.standingSVG(lookOf(g.c),{mood:'idle'})+'</g>'; Lr.front.prepend(el); departures.push({el,x:g.x,y:g.y,t:0}); }
   }
   for(const [id,a] of arrivals) { a.t+=dt; if(!current.get(id)?.queue||a.t>=1.8) { arrivals.delete(id); lastWaitKey=''; } }
@@ -60,6 +61,92 @@ function placeArrivals(v) {
     const f=clamp(a.t/1.8,0,1),sl=SLOTS[k];
     e.setAttribute('transform','translate('+(32+(sl.x-32)*f)+' '+(A.VH+120+(sl.y-A.VH-120)*f)+') scale(.92)');
   });
+}
+
+// ---------- Người ngoài: phụ huynh tới tìm con, kẻ trộm ôm đồ chạy ----------
+// Đi theo đồng hồ thật (không theo dt của game) vì lúc phụ huynh tới game đang tạm dừng chờ chủ quán chọn.
+const DOOR = { x: 32, y: A.VH + 140 }, MOM_SPOT = { x: 300, y: 452 }, AISLE_Y = 520;
+// điểm trên đường gấp khúc pts ứng với phần quãng đường f (0..1)
+function along(pts, f) {
+  const seg = pts.slice(1).map((p, i) => Math.hypot(p.x - pts[i].x, p.y - pts[i].y));
+  let d = f * seg.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < seg.length; i++) {
+    if (d <= seg[i] || i === seg.length - 1) { const k = seg[i] ? clamp(d / seg[i], 0, 1) : 1; return { x: pts[i].x + (pts[i + 1].x - pts[i].x) * k, y: pts[i].y + (pts[i + 1].y - pts[i].y) * k }; }
+    d -= seg[i];
+  }
+  return pts[pts.length - 1];
+}
+let mom = null, runners = [], extraClock = 0;
+const bubbleSVG = (text, y = -168, kind = '') => {
+  const w = Math.max(60, [...text].length * 9.5 + 26);
+  return `<g transform="translate(0 ${y})"><rect x="${-w / 2}" y="-19" width="${w}" height="30" rx="15" fill="#FFFDF4"
+    stroke="${kind === 'bad' ? '#C0392B' : '#D9B98A'}" stroke-width="2.5"/><path d="M-6,11 L0,20 L6,11 Z" fill="#FFFDF4"/>
+    <text y="2" text-anchor="middle" font-size="16" font-weight="800" fill="${kind === 'bad' ? '#C0392B' : '#3A2A22'}">${escText(text)}</text></g>`;
+};
+function momIn(line) {
+  if (mom) mom.el.remove();
+  const el = node('g', { 'pointer-events': 'none', class: 'walking' });
+  Lr.front.prepend(el);
+  mom = { el, x: DOOR.x, y: DOOR.y, to: MOM_SPOT, look: A.makeLook('vanphong', 'f'), line, mood: 'call', key: '' };
+}
+function momOut(withKid) {
+  if (!mom) return;
+  Object.assign(mom, { to: DOOR, line: withKid ? 'Về nhà ngay cho mẹ!' : 'Hừm… không có thật à?', mood: withKid ? 'call' : 'idle', key: '' });
+}
+// Kẻ trộm rời máy: thay cảnh "khách đi về" bằng cảnh ôm đồ chạy (dur = số giây được phép bắt)
+function addRunner(c, x, y) {
+  const el = node('g', { class: 'walking sc-thief', 'data-hit': 'thief' });
+  Lr.front.prepend(el);
+  // chạy lên lối đi giữa quán, băng sang trái rồi ra cửa — để người chơi kịp thấy và bấm
+  const path = [{ x, y }, { x, y: AISLE_Y }, { x: 70, y: AISLE_Y }, DOOR];
+  runners.push({ el, c, path, x, y, t: 0, dur: Math.max(0.8, c.runFor || 1), key: '' });
+}
+const maskSVG = `<g transform="translate(0 -98)"><path d="M-30,-6 Q0,-12 30,-6 L30,10 Q0,4 -30,10 Z" fill="#26232E"/>
+  <ellipse cx="-11" cy="3" rx="6" ry="4.5" fill="#F6EBD4"/><ellipse cx="11" cy="3" rx="6" ry="4.5" fill="#F6EBD4"/>
+  <circle cx="-11" cy="3" r="2.3" fill="#26232E"/><circle cx="11" cy="3" r="2.3" fill="#26232E"/></g>`;
+function stepExtras() {
+  const now = performance.now();
+  const dt = extraClock ? Math.min(0.1, (now - extraClock) / 1000) : 0;
+  extraClock = now;
+  if (mom) {
+    const dx = mom.to.x - mom.x, dy = mom.to.y - mom.y, d = Math.hypot(dx, dy), step = 230 * dt;
+    if (d <= step) { mom.x = mom.to.x; mom.y = mom.to.y; } else { mom.x += dx / d * step; mom.y += dy / d * step; }
+    const moving = d > 1;
+    if (!moving && mom.to === DOOR) { mom.el.remove(); mom = null; }
+    else {
+      const key = [mom.line, mom.mood, moving].join('|');
+      if (key !== mom.key) {
+        mom.key = key;
+        mom.el.setAttribute('class', moving ? 'walking' : '');
+        mom.el.innerHTML = `<g transform="scale(.95)">${A.standingSVG(mom.look, { mood: mom.mood })}</g>${moving && mom.to !== DOOR ? '' : bubbleSVG(mom.line)}`;
+      }
+      mom.el.setAttribute('transform', `translate(${mom.x} ${mom.y})`);
+    }
+  }
+  for (let i = runners.length - 1; i >= 0; i--) {
+    const r = runners[i], c = r.c;
+    // bị tóm: khựng lại (anh công an / nhân viên tóm ngay thì vẫn kịp chạy vài bước)
+    const frozen = c.caught && !c.released && r.t >= Math.min(0.5, r.dur);
+    if (c.released && !r.released) { r.released = true; r.relT = 0; }   // chọn xong: lủi thủi đi ra cửa
+    if (r.released) r.relT += dt;
+    else if (!frozen) r.t += dt;
+    const f = r.released ? clamp(r.relT / 2.2, 0, 1) : clamp(r.t / r.dur, 0, 1);
+    if (r.released) ({ x: r.x, y: r.y } = along([{ x: r.rx, y: r.ry }, { x: 70, y: r.ry }, DOOR], f));
+    else { ({ x: r.x, y: r.y } = along(r.path, f)); r.rx = r.x; r.ry = r.y; }
+    if (f >= 1) { r.el.remove(); runners.splice(i, 1); continue; }
+    const state = r.released ? 'out' : frozen ? 'caught' : 'run';
+    if (state !== r.key) {
+      r.key = state;
+      r.el.setAttribute('class', state === 'caught' ? 'sc-thief' : 'walking sc-thief');
+      r.el.setAttribute('pointer-events', state === 'run' ? 'all' : 'none');
+      const icon = c.stole && state === 'run' ? PARTS[c.stole].icon : '';
+      r.el.innerHTML = `<rect x="-40" y="-150" width="80" height="160" fill="transparent"/>
+        <g transform="scale(.92)">${A.standingSVG(lookOf(c), { mood: state === 'run' ? 'focus' : 'sad' })}${maskSVG}
+        ${icon ? `<text y="-40" text-anchor="middle" font-size="30">${icon}</text>` : ''}</g>
+        ${state === 'run' ? bubbleSVG('🦹 Bắt trộm!', -168, 'bad') : state === 'caught' ? bubbleSVG('🙇 Em xin lỗi…') : ''}`;
+    }
+    r.el.setAttribute('transform', `translate(${r.x} ${r.y})`);
+  }
 }
 
 // ---------- Dựng khung cảnh ----------
@@ -101,6 +188,7 @@ function onTap(root, pick, fn) {
 
 function start({ shopName, prices, staffCount = 0, hot = '', hotName = '', decor = {} }) {
   arrivals.clear(); departures.length = 0; previousGuests.clear();
+  mom = null; runners = []; extraClock = 0;
   svg.innerHTML = A.defsSVG();
   const layer = (id, style) => { const g = node('g', { id }); if (style) g.setAttribute('style', style); svg.appendChild(g); return g; };
   Lr = {
@@ -158,6 +246,7 @@ function fire(h) {
   if (!h) return handlers.empty && handlers.empty();
   if (h.kind === 'dog') { dog.awake = 2.6; say(58, 600, 'Gâu~ ♥', 'good'); return; }
   if (h.kind === 'cust') return handlers.cust(h.id);
+  if (h.kind === 'thief') return handlers.thief && handlers.thief();
   if (h.kind === 'bubble') return handlers.bubble(h.i);
   return handlers.pc(h.i);
 }
@@ -476,7 +565,9 @@ function showRowOf(i) {
 
 // ---------- Ánh sáng theo giờ ----------
 function applyLight(t) {
-  const n = smooth(16.4, 19.2, t);
+  // giờ chạy liên tục qua nửa đêm (24 = 0h, 30 = 6h): gần 6h sáng trời hửng dần
+  const dawn = smooth(29, 30.8, t);
+  const n = smooth(16.4, 19.2, t) * (1 - dawn);
   const dusk = clamp(1 - Math.abs(t - 17.6) / 1.5, 0, 1);
   const set = (sel, val) => { const e = svg.querySelector(sel); if (e) e.setAttribute('opacity', val.toFixed(3)); };
   // đêm: quán chìm vào xanh tím, tối dần ra mép khung; khu máy chỉ còn ánh màn hình, quầy vẫn vàng ấm
@@ -516,6 +607,7 @@ function frame(v, dt) {
   stepGuests(v, dt);
   renderWaiting(v);
   placeArrivals(v);
+  stepExtras();
   stepOwner(dt);
   renderOwner(v);
   stepStaff(dt);
@@ -528,5 +620,5 @@ function frame(v, dt) {
   }
 }
 
-window.PlayScene = { mount, start, frame, deliver, guide, clean, anchor, showRowOf, say, crop, onTap, PER_ROW };
+window.PlayScene = { mount, start, frame, deliver, guide, clean, anchor, showRowOf, say, crop, onTap, momIn, momOut, PER_ROW };
 })();

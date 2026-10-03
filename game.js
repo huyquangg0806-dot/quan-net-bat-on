@@ -37,8 +37,8 @@ function durText(h) {
   return `${hh}:${String(mm).padStart(2, '0')}`;
 }
 function clockText(t) {
-  const h = Math.floor(t), m = Math.floor((t - h) * 60);
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  const h = Math.floor(t), m = Math.floor((t - h) * 60);   // qua nửa đêm: 25 = 01:00
+  return `${String(h % 24).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 const mood = s => s >= 85 ? '😍' : s >= 65 ? '🙂' : s >= 40 ? '😐' : '😡';
 const keysOf = cat => Object.keys(ITEMS).filter(k => ITEMS[k].cat === cat && S.unlocked[k]);
@@ -149,6 +149,9 @@ function normalizeSave() {
   if (!GAMES[S.hot]) S.hot = 'lmhb';
   S.pendingPolice = S.pendingPolice || 0;
   S.pendingKid = S.pendingKid || 0;
+  S.nightStrikes = S.nightStrikes || 0;       // số lần bị công an bắt mở quá giờ (chưa được xóa)
+  S.nightStrikeDay = S.nightStrikeDay || 0;   // ngày vi phạm gần nhất
+  S.suspendDay = S.suspendDay || 0;           // ngày bị đình chỉ, không được mở cửa
   S.hintSeen = S.hintSeen || {};   // số lần đã hiện gợi ý "Lần tới" cho từng sự việc
   S.regulars = S.regulars || [];   // sổ khách quen: danh tính cố định + ký ức về quán
   S.nextRegId = S.nextRegId || 1;
@@ -964,12 +967,15 @@ function renderRegulars() {
 const staffName = id => `Bạn ${id}`;
 const staffById = id => S.staff.find(p => p.id === id);
 const staffMistakeChance = p => clamp(0.06 - (p.wage - C.STAFF_WAGE_DEFAULT) / 1000000, 0.01, 0.12) * (p.trained ? 0.35 : 1);
+// lương ca đêm (sau 22h) mỗi giờ cho cả nhóm nhân viên
+const nightWagePerHour = () => S.staff.reduce((n, p) => n + p.wage, 0) / C.SHIFT_HOURS * C.NIGHT_WAGE_MUL;
 function renderStaff() {
   const max = Math.ceil(S.machines.length / C.STAFF_PCS);
   const wage = S.staff.reduce((sum, p) => sum + p.wage, 0);
   $('#prep-staff').innerHTML = `<div class="staff-box">
     <p><b>${S.staff.length}/${max} nhân viên</b> · sức phục vụ ${S.staff.length * C.STAFF_PCS} máy · lương ${money(wage)}/ngày</p>
     <p class="muted small">Một người phụ trách tối đa 3 máy đang có khách. Không có nhân viên trống, bạn vẫn tự nhận đơn và mang món như trước.</p>
+    <p class="muted small">🌙 Lương ngày trả cho ca 8h–22h. Mở quá 22h: mỗi giờ trả thêm ${money(nightWagePerHour())} cho cả nhóm, và nhân viên mệt nên ghi sai đơn nhiều gấp ${C.NIGHT_STAFF_TIRED}.</p>
     ${S.staff.map(p => `<div class="staff-row" data-staff="${p.id}">
       <div><b>🧑‍🍳 ${staffName(p.id)}</b> ${p.trained ? '<span class="chip">Đã training</span>' : ''}
         <div class="muted small">Lỗi ghi đơn khoảng ${Math.round(staffMistakeChance(p) * 100)}%</div></div>
@@ -1064,6 +1070,7 @@ function renderPrep() {
     (empty.length ? `<p class="warn-text">⚠️ Đang hết: ${empty.join(', ')} — khách gọi sẽ không có mà bán!</p>` : '') +
     (expTotal ? `<p class="bad-text">☠️ Kho còn ${expTotal} món hết date — sẽ bị dùng trước. Khách có thể đau bụng, công an kiểm tra là bị phạt!</p>` : '') +
     (S.pendingPolice || S.pendingKid ? `<p class="bad-text">👮 Hôm qua có người báo công an — sáng nay công an sẽ tới kiểm tra!</p>` : '') +
+    (S.suspendDay === S.day ? '<p class="bad-text">🚫 Hôm nay quán bị đình chỉ vì mở quá giờ nhiều lần — không mở cửa được.</p>' : '') +
     billHTML() + netPlansHTML() + loansHTML();
 }
 
@@ -1210,7 +1217,10 @@ function startDay() {
       broken: false, repair: 0, brokeFor: 0, breakLoss: 0, el: null, bubbleKey: '' })),
     led: { pingHours: 0, hours: 0, food: 0, tips: 0, power: 0, staff: 0, staffMistakes: 0, served: 0, walkouts: 0, satSum: 0, ratingBefore: S.rating, reviews: [], lost: {}, fine: 0, sick: 0, visits: [],
       returning: 0, newFaces: 0, gone: [],
-      acPower: 0, fuel: 0, refund: 0, hotHours: 0, darkHours: 0, smashes: 0, outages: 0, noise: 0, kicked: 0, mom: [], thefts: [], caught: 0, thiefCash: 0 },
+      acPower: 0, fuel: 0, refund: 0, hotHours: 0, darkHours: 0, smashes: 0, outages: 0, noise: 0, kicked: 0, mom: [], thefts: [], caught: 0, thiefCash: 0,
+      lights: 0, nightWage: 0, closeRefund: 0, overnight: 0, raid: null, closedAt: 0 },
+    // đóng cửa chủ động: closing = đang chuẩn bị đóng (không nhận khách mới) · shutter = kéo cửa cuốn · speed = tua nhanh
+    closing: false, shutter: false, speed: 1,
     // hạ tầng: nhiệt độ phòng, điều hòa, lịch cúp điện hôm nay, máy phát
     temp: outsideTemp(C.OPEN_HOUR) + 1, hot: false, acOn: S.acOn, running: 0,
     outage: S.outageNext || surpriseOutage(), wasOut: false, genOn: false, darkT: 0,
@@ -1220,11 +1230,11 @@ function startDay() {
     // kidReports = tin phụ huynh báo quán cho học sinh chơi khuya (mẹ gank bị lộ)
     reports: S.pendingPolice, kidReports: S.pendingKid,
     policeAt: S.pendingPolice || S.pendingKid ? C.OPEN_HOUR + rand(0.3, 1.2)
-      : Math.random() < C.POLICE_RANDOM ? rand(C.OPEN_HOUR + 1, C.LAST_ENTRY_HOUR - 1) : null,
+      : Math.random() < C.POLICE_RANDOM ? rand(C.OPEN_HOUR + 1, C.EVENT_END_HOUR - 1) : null,
     momAt: null, momKid: 0, momCount: 0,   // mẹ gank: giờ phụ huynh tới, tìm khách nào, số lần hôm nay
     // trộm: giờ kẻ trộm tới hôm nay (camera làm trộm ngại ghé) · escape = kẻ trộm đang chạy ra cửa
     thiefAt: S.day >= C.THIEF_FROM_DAY && Math.random() < C.THIEF_DAY_CHANCE * (S.upgrades.camera ? 0.5 : 1)
-      ? rand(C.OPEN_HOUR + 1, C.LAST_ENTRY_HOUR - 2) : null,
+      ? rand(C.OPEN_HOUR + 1, C.EVENT_END_HOUR - 2) : null,
     escape: null,
   };
   S.pendingPolice = 0;
@@ -1240,6 +1250,12 @@ function startDay() {
   VFX.shutter('up');
   log('☀️ Quán mở cửa!');
   if (S.staff.length) log(`🧑‍🍳 ${S.staff.length} nhân viên vào ca, phụ trách tối đa ${S.staff.length * C.STAFF_PCS} máy`);
+  if (S.suspendDay === S.day) {   // bị đình chỉ vì mở quá giờ nhiều lần: hôm nay không được mở
+    R.suspended = true;
+    R.policeAt = null;
+    endDay();
+    return;
+  }
   if (!S.seenTutorial) {
     S.seenTutorial = true;
     saveGame();
@@ -1252,13 +1268,13 @@ function startDay() {
 function planOutage() {
   if (S.day < C.OUTAGE_FROM_DAY || Math.random() >= C.OUTAGE_PLANNED) return null;
   const len = Math.round(rand(...C.OUTAGE_LEN) * 2) / 2;
-  const from = Math.round(rand(C.OPEN_HOUR + 1, C.LAST_ENTRY_HOUR - len) * 2) / 2;
+  const from = Math.round(rand(C.OPEN_HOUR + 1, C.EVENT_END_HOUR - len) * 2) / 2;
   return { from, to: from + len, planned: true };
 }
 // Cúp điện bất ngờ trong ngày (không báo trước)
 function surpriseOutage() {
   if (S.day < C.SURPRISE_FROM_DAY || Math.random() >= C.OUTAGE_SURPRISE) return null;
-  const from = rand(C.OPEN_HOUR + 1.5, C.LAST_ENTRY_HOUR - 1);
+  const from = rand(C.OPEN_HOUR + 1.5, C.EVENT_END_HOUR - 1);
   return { from, to: from + rand(...C.SURPRISE_LEN), planned: false };
 }
 function onOutage() {
@@ -1459,7 +1475,7 @@ function updateMom(gh) {
 function momArrives() {
   R.momAt = null;
   const pc = R.pcs.find(p => p.cust && p.cust.id === R.momKid);
-  if (!pc) { log('👩 Có cô tới tìm con, nhưng bé về nhà rồi. Hú hồn!'); return; }
+  if (!pc) { log('👩 Có cô tới tìm con, nhưng bé về nhà rồi. Hú hồn!'); PlayScene.momIn?.('Ủa, về rồi à?'); PlayScene.momOut?.(false); return; }
   const c = pc.cust;
   stopHold();
   SFX.play('door');
@@ -1469,6 +1485,7 @@ function momArrives() {
   const late = R.time >= C.MOM_REPORT_FROM;
   const wasPaused = R.paused;
   setPause(true);
+  PlayScene.momIn?.(`${kidName(c)} đâu rồi!`);   // phụ huynh bước vào đứng gần quầy
   openModal({
     title: '👩 Có cô tìm con!',
     body: `<p><b><i>“${pick(MOM_LINES)(kidName(c))}”</i></b></p>
@@ -1486,6 +1503,7 @@ function momArrives() {
 function momHide(pc, c, chance) {
   if (pc.cust !== c) return;
   if (Math.random() >= chance) return momTake(pc, c, 'caught');
+  PlayScene.momOut?.(false);
   hit(c, 'momhid', 15, null, 'Mẹ tới tìm, chủ quán giấu giùm');
   c.affBonus = (c.affBonus || 0) + C.MOM_HIDE_AFF;
   R.led.mom.push({ name: c.name, choice: 'hide', ok: true });
@@ -1496,6 +1514,7 @@ function momHide(pc, c, chance) {
 function momTake(pc, c, how) {
   if (pc.cust !== c) return;
   R.led.mom.push({ name: c.name, choice: how === 'pointed' ? 'point' : 'hide', ok: false });
+  PlayScene.momOut?.(true);
   if (how === 'pointed') {
     hit(c, 'mompointed', -45, null, 'Mẹ tới tìm, chủ quán chỉ chỗ luôn');
     updateRating(100, 1);    // phụ huynh thấy quán đàng hoàng (bù phần nào việc bé giận chấm sao thấp)
@@ -1544,6 +1563,7 @@ function steal(pc) {
     return caughtThief(pc, c, staffName(S.staff[0].id));
   }
   R.escape = { pc, c, part, left: C.THIEF_CATCH_SEC + (S.upgrades.camera ? C.THIEF_CAM_SEC : 0) };
+  c.runFor = R.escape.left;   // cảnh vẽ kẻ trộm ôm đồ chạy ra cửa đúng chừng ấy giây
   pc.alarm = true;
   SFX.play('warn');
   fx(pc.el.root, `⚠️ Mất ${partName(part)}! Bấm bắt trộm!`, 'bad');
@@ -1571,6 +1591,7 @@ function catchThief() {
 // Bắt được: lấy lại đồ, rồi chọn giao công an / tha / bắt đền
 function caughtThief(pc, c, by) {
   pc.m.missing = null;
+  c.caught = true;   // cảnh: kẻ trộm khựng lại, cúi đầu xin lỗi
   R.led.caught++;
   SFX.play('good');
   fx(pc.el.root, '🙌 Bắt được rồi!', 'good');
@@ -1578,6 +1599,7 @@ function caughtThief(pc, c, by) {
   setPause(true);
   const done = () => {
     if (c.relapse) S.regulars = S.regulars.filter(r => r.id !== c.regId);   // tha rồi còn tái phạm: gạch tên
+    c.released = true;   // cảnh: lủi thủi đi ra cửa
     closeModal();
   };
   const actions = [
@@ -1624,7 +1646,9 @@ function setPause(p) {
 // ---------- Khách ----------
 function nextSpawnDelay() {
   const t = R.time;
-  const curve = t < 11 ? 0.75 : t < 13.5 ? 1.1 : t < 17 ? 0.9 : 1.25;   // trưa có dân văn phòng, tối đông nhất
+  // trưa có dân văn phòng, tối đông nhất; qua 22h thưa dần, 0h–5h gần như vắng, gần sáng lác đác
+  const curve = t < 11 ? 0.75 : t < 13.5 ? 1.1 : t < 17 ? 0.9 : t < 22 ? 1.25
+    : t < 24 ? 0.7 : t < 26 ? 0.35 : t < 29 ? 0.15 : 0.3;
   const demand = (0.55 + S.rating * 0.15) * curve * (isWeekend() ? C.WEEKEND_DEMAND : 1);
   const mean = C.SPAWN_BASE / (R.pcs.length * demand);
   return mean * rand(0.5, 1.5);
@@ -1642,6 +1666,7 @@ function spawnCustomer(thief = false) {
     n[4] ? Math.min(0.5, 0.12 + 0.08 * n[4]) : 0];
   // khách quen giữ nguyên danh tính, tính cách, giọng nói và thói quen (máy, game, số giờ)
   const rec = thief ? null : pickRegular(w);
+  if (R.shutter && !rec) return;   // kéo cửa cuốn: chỉ khách quen gọi cửa mới vào
   let tier, segId, trait, voice, name, avatar, gender, game, hours;
   if (rec) {
     ({ tier, seg: segId, trait, voice, name, avatar, gender } = rec);
@@ -1671,12 +1696,16 @@ function spawnCustomer(thief = false) {
     if (!S.installed[game]) game = Object.keys(GAMES).find(k => S.installed[k] && GAMES[k].minTier <= tier) || game;
   }
   const lost = !S.installed[game];   // quán chưa cài game khách muốn → khách hỏi rồi đi
+  // khuya: người lớn hay xin bao đêm (chơi tới 6h, trả trọn gói)
+  const overnight = !thief && !lost && !seg.kid && !R.closing && R.time >= C.OVERNIGHT_FROM && R.time < C.OVERNIGHT_TO
+    && Math.random() < C.OVERNIGHT_CHANCE;
+  if (overnight) hours = C.OVERNIGHT_UNTIL - R.time;
   const P = lost ? C.LOST_LINGER : C.QUEUE_PATIENCE * patienceMul() * (tr.patience || 1);
   const c = {
     id: R.nextId++, name, avatar, gender,
     seg: segId, trait, voice,
     tier, hours, patience: P, patienceMax: P, sat: 100,
-    game, lost, atCounter: false,
+    game, lost, overnight, atCounter: false,
     loaded: 0, remaining: 0, order: null, ordered: false, ate: false,
     ev: {}, causes: [],   // sổ sự việc trong lúc ở quán — dùng để viết nhận xét
     // khách quen: đã biết tính cách (hiện biểu tượng), nhớ chuyện lần trước và máy quen
@@ -1698,6 +1727,7 @@ function spawnCustomer(thief = false) {
   c.greet = lost ? '' : rec ? regularGreet(c) : tr.greet ? pick(tr.greet) : '';
   const request = lost ? pick(LOST_LINES)(g)
     : thief ? pick(THIEF_LINES)(TIERS[tier].phrase, hoursText(hours))
+    : overnight ? pick(OVERNIGHT_LINES)(TIERS[tier].phrase, g)
     : tier === 4 ? pick(STREAM_LINES)(hoursText(hours), g)
     : pick(seg.requests || CUSTOMER_LINES)(TIERS[tier].phrase, hoursText(hours), g);
   c.line = c.greet ? `${c.greet} ${request}` : request;
@@ -1853,7 +1883,7 @@ function openCheckin(pc, c) {
       <div class="speech"><small>${esc(c.name)}${c.regId ? ` · 🔁 lần ${c.visitNo}` : ''}</small>“${esc(c.line)}”</div></div>
     <div class="chips want">
       <span class="chip t${c.tier}">${TIERS[c.tier].icon} ${TIERS[c.tier].name}</span>
-      <span class="chip">⏱️ ${hoursText(c.hours)}</span><span class="chip">${gameIcon(c.game)}${c.game === S.hot ? ' 🔥' : ''}</span>
+      <span class="chip">${c.overnight ? `🌙 Bao đêm tới ${clockText(C.OVERNIGHT_UNTIL)}` : `⏱️ ${hoursText(c.hours)}`}</span><span class="chip">${gameIcon(c.game)}${c.game === S.hot ? ' 🔥' : ''}</span>
       ${c.favPc != null && c.favPc < R.pcs.length ? `<span class="chip">❤️ Máy ${c.favPc + 1}</span>` : ''}
     </div>
     <p class="hint">${guided ? `🧑‍🍳 Nhân viên đã dẫn khách vào máy ${pc.i + 1}. Bạn chỉ cần nạp giờ.`
@@ -1861,19 +1891,26 @@ function openCheckin(pc, c) {
     <div class="picker"></div>
     <div class="assign"></div>`;
   const foot = el('div', 'checkin-foot');
-  foot.innerHTML = `
-    <div class="fill-wrap"></div>
-    <div class="readout">Đã nạp <b class="ro-val">0:00</b> <span class="muted">/ khách cần ${durText(c.hours)}</span></div>
-    <button class="btn hold">⏱️ Giữ để nạp giờ</button>`;
-  const ticks = [];
-  for (let h = 1; h <= C.MAX_LOAD_HOURS; h++) ticks.push({ v: h, label: h + 'h' });
-  const fill = buildFill({
-    max: C.MAX_LOAD_HOURS, zone: [c.hours - C.HOUR_PERFECT, c.hours + C.HOUR_PERFECT],
-    mark: c.hours, ticks, cls: 'fill-hours',
-  });
-  foot.querySelector('.fill-wrap').appendChild(fill.root);
-  const holdBtn = foot.querySelector('.hold');
-  bindHold(holdBtn, st, 'v', C.HOUR_FILL_RATE, C.MAX_LOAD_HOURS);
+  let fill = null, holdBtn = null;
+  if (c.overnight) {   // bao đêm: trả trọn gói, không cần giữ nút nạp giờ
+    st.v = c.hours;
+    foot.innerHTML = `<div class="readout">🌙 Gói bao đêm: chơi tới <b>${clockText(C.OVERNIGHT_UNTIL)}</b> · trả trọn gói
+      <b class="ro-val"></b> <span class="muted">(bằng ${C.OVERNIGHT_PAY_HOURS} giờ chơi)</span></div>`;
+  } else {
+    foot.innerHTML = `
+      <div class="fill-wrap"></div>
+      <div class="readout">Đã nạp <b class="ro-val">0:00</b> <span class="muted">/ khách cần ${durText(c.hours)}</span></div>
+      <button class="btn hold">⏱️ Giữ để nạp giờ</button>`;
+    const ticks = [];
+    for (let h = 1; h <= C.MAX_LOAD_HOURS; h++) ticks.push({ v: h, label: h + 'h' });
+    fill = buildFill({
+      max: C.MAX_LOAD_HOURS, zone: [c.hours - C.HOUR_PERFECT, c.hours + C.HOUR_PERFECT],
+      mark: c.hours, ticks, cls: 'fill-hours',
+    });
+    foot.querySelector('.fill-wrap').appendChild(fill.root);
+    holdBtn = foot.querySelector('.hold');
+    bindHold(holdBtn, st, 'v', C.HOUR_FILL_RATE, C.MAX_LOAD_HOURS);
+  }
   const pickerEl = body.querySelector('.picker'), assignEl = body.querySelector('.assign');
 
   const m = openModal({
@@ -1937,8 +1974,8 @@ function openCheckin(pc, c) {
   m.update = () => {
     if (!guided && pc && pc.cust) { pc = bestPc(c); R.pick = pc ? pc.i : null; }
     renderPicker();
-    fill.set(st.v);
-    setText(ro, durText(st.v));
+    if (fill) fill.set(st.v);
+    setText(ro, c.overnight ? (pc ? money(overnightPrice(pc, c)) : '') : durText(st.v));
     confirm.disabled = st.v <= 0.05 || !pc || (guided && pc.cust !== c);
     setText(confirm, guided ? `Bắt đầu máy ${pc.i + 1} ✓` : pc ? `Xếp vào máy ${pc.i + 1} ✓` : 'Xếp máy ✓');
   };
@@ -1948,6 +1985,9 @@ function openCheckin(pc, c) {
 
 // Khách trả theo hạng thấp hơn giữa máy và yêu cầu, cộng tiền đồ xịn (chuột, phím, màn, ghế) của máy
 const payRate = (pc, c) => TIERS[Math.min(c.tier, pc.tier)].rate + gearBonus(pc.m);
+const overnightPrice = (pc, c) => round500(C.OVERNIGHT_PAY_HOURS * payRate(pc, c));
+// Đóng cửa khi khách còn giờ: hoàn phần tiền giờ chưa chơi (theo tỉ lệ giờ còn lại / giờ đã nạp)
+const refundFor = c => c.loaded > 0 ? round500((c.paid || 0) * clamp(c.remaining / c.loaded, 0, 1)) : 0;
 
 function seat(pc, c, loaded) {
   if (pc.m.missing) return;
@@ -1992,7 +2032,8 @@ function seat(pc, c, loaded) {
   }
 
   const diff = loaded - c.hours;
-  if (Math.abs(diff) <= C.HOUR_PERFECT) { hit(c, 'perfect', 6, 'hours', 'Nạp đúng giờ'); notes.push(['Chuẩn giờ! ✓', 'good']); }
+  if (c.overnight) { hit(c, 'overnight', 5, 'hours', 'Được bao đêm giá hời'); notes.push(['Bao đêm tới sáng! 🌙', 'good']); }
+  else if (Math.abs(diff) <= C.HOUR_PERFECT) { hit(c, 'perfect', 6, 'hours', 'Nạp đúng giờ'); notes.push(['Chuẩn giờ! ✓', 'good']); }
   else if (diff > 0) { hit(c, 'bonus', 2, 'hours', `Được nạp dư ${durText(diff)} (quán tặng)`); notes.push([`Dư ${durText(diff)} — cho không`, 'warn']); }
   else {
     hit(c, 'short', -Math.min(30, 8 + -diff * 18), 'hours', `Nạp thiếu ${durText(-diff)}`);
@@ -2000,9 +2041,11 @@ function seat(pc, c, loaded) {
   }
 
   const rate = payRate(pc, c);
-  const pay = Math.round(Math.min(loaded, c.hours) * rate / 500) * 500;
+  const pay = c.overnight ? overnightPrice(pc, c) : Math.round(Math.min(loaded, c.hours) * rate / 500) * 500;
   S.money += pay;
   R.led.hours += pay;
+  c.paid = pay;
+  if (c.overnight) R.led.overnight++;
 
   c.loaded = loaded;
   c.remaining = loaded;
@@ -2063,7 +2106,7 @@ function createOrder(pc) {
   const items = genOrder(c.allowFood, segOf(c).order);
   const actualItems = { ...items };
   let mistake = false;
-  if (worker && Math.random() < staffMistakeChance(worker)) {
+  if (worker && Math.random() < staffMistakeChance(worker) * (R.time >= C.NIGHT_FROM ? C.NIGHT_STAFF_TIRED : 1)) {   // ca đêm: nhân viên mệt
     const drinks = keysOf('drink');
     const old = drinks.find(k => items[k]);
     const other = drinks.filter(k => k !== old);
@@ -2459,9 +2502,16 @@ function leave(pc, reason) {
     else hit(c, 'foodslow', -15, 'food', 'Chưa nhận được món đã phải về');
     c.order = null;
   }
-  if (reason === 'close' && c.remaining > 0.25) {
-    // đóng cửa khi khách còn giờ đã trả tiền
-    hit(c, 'closed', -Math.min(30, c.remaining * 10), 'hours', 'Còn giờ chơi mà quán đã đóng cửa');
+  if (reason === 'close' && c.remaining > 0.1) {
+    // đóng cửa khi khách còn giờ: hoàn tiền giờ chưa chơi, khách vẫn hơi tiếc
+    const refund = refundFor(c);
+    if (refund) {
+      S.money -= refund;
+      R.led.closeRefund += refund;
+      fx(pc.el.root, `↩️ Hoàn ${money(refund)}`, 'warn');
+    }
+    if (c.remaining > 0.25) hit(c, 'closed', -Math.min(C.CLOSE_HIT_MAX, c.remaining * C.CLOSE_HIT_PER_HOUR), 'hours',
+      `Còn ${durText(c.remaining)} giờ chơi mà quán đóng cửa${refund ? ' (được hoàn tiền)' : ''}`);
   }
   // ăn đồ hết date mà chưa kịp đau bụng ở quán → về nhà mới đau
   const sickAtHome = c.sickAt != null;
@@ -2537,9 +2587,11 @@ function update(dt) {
   if (R.momAt != null && R.time >= R.momAt && (!modal || modal.docked) && !hold) { momArrives(); return; }
 
   updateInfra(dt, gh);
+  updateNight(gh);
+  if (R.over || (modal && modal.raid)) return;   // công an vừa ập vào
   const on = powered();
 
-  if (R.time < C.LAST_ENTRY_HOUR) {
+  if (!R.closing) {
     R.spawnIn -= dt;
     if (R.spawnIn <= 0) {
       if (R.queue.length < C.QUEUE_MAX && on) spawnCustomer(R.thiefAt != null && R.time >= R.thiefAt);   // quán tối om thì không ai vào
@@ -2660,15 +2712,128 @@ function update(dt) {
   updateEscape(dt);
 
   const anyone = R.queue.length || R.pcs.some(p => p.cust);
-  if (R.time >= C.CLOSE_HOUR || (R.time >= C.LAST_ENTRY_HOUR && !anyone)) endDay();
+  if (R.time >= C.MAX_OPEN_UNTIL) {
+    log('🌅 8h sáng rồi — quán phải đóng để dọn dẹp, kiểm kê');
+    endDay();
+  } else if (R.closing && !anyone && !R.escape) endDay();   // chuẩn bị đóng cửa và khách đã về hết
   else if (!modal) openStaffTask(nextStaffTask(true));
+}
+
+// ---------- Mở đêm & đóng cửa chủ động ----------
+// Mỗi khung hình: tiền đèn buổi tối, lương ca đêm, công an kiểm tra giờ giấc (23h–6h)
+function updateNight(gh) {
+  if (R.time >= C.LIGHTS_FROM) R.led.lights += C.LIGHTS_PER_HOUR * gh;
+  if (R.time >= C.NIGHT_FROM) R.led.nightWage += nightWagePerHour() * gh;
+  if (Math.random() < nightPoliceRate() * gh) nightRaid();
+}
+const inNightBan = (t = R.time) => t >= C.NIGHT_POLICE_FROM && t < C.NIGHT_POLICE_TO;
+// khả năng bị công an kiểm tra mỗi giờ game: quán càng đông, càng ồn, có học sinh thì càng dễ bị báo
+function nightPoliceRate() {
+  if (!inNightBan()) return 0;
+  const playing = R.pcs.filter(p => p.cust && !p.cust.awaitingLoad).length;
+  let rate = C.NIGHT_POLICE_BASE + C.NIGHT_POLICE_PER_CUST * playing;
+  if (R.pcs.some(p => p.cust?.noisy)) rate *= C.NIGHT_POLICE_NOISE;
+  if (kidsPlaying().length) rate *= C.NIGHT_POLICE_KID;
+  if (R.shutter) rate *= C.SHUTTER_POLICE_MUL;
+  return rate;
+}
+// Số lần vi phạm còn tính (sạch đủ lâu thì được xóa)
+function nightStrikes() {
+  if (S.nightStrikes && S.day - S.nightStrikeDay >= C.NIGHT_STRIKE_RESET) S.nightStrikes = 0;
+  return S.nightStrikes;
+}
+// Công an kiểm tra giờ giấc: buộc đóng cửa ngay (hoàn tiền), phạt theo số lần vi phạm
+function nightRaid() {
+  stopHold();
+  if (modal) closeModal();
+  SFX.play('police');
+  const n = nightStrikes() + 1;
+  S.nightStrikes = n;
+  S.nightStrikeDay = S.day;
+  const fine = C.NIGHT_FINES[Math.min(n, C.NIGHT_FINES.length) - 1];
+  const suspend = n >= C.NIGHT_SUSPEND_AT;
+  if (fine) {
+    S.money -= fine;
+    R.led.fine += fine;
+  }
+  if (n >= 2) S.rating = clamp(S.rating - C.NIGHT_RATING_HIT, 1, 5);
+  if (suspend) S.suspendDay = S.day + 1;
+  const kids = kidsPlaying().length;
+  R.led.raid = { n, fine, suspend, time: R.time, kids };
+  log(`🚨 Công an kiểm tra lúc ${clockText(R.time)} — quán phải đóng cửa${fine ? `, phạt ${money(fine)}` : ''}`);
+  setPause(true);
+  const m = openModal({
+    title: '👮 Công an kiểm tra giờ mở cửa', cls: 'modal-police', dismissable: false,
+    body: `<p>Đã ${clockText(R.time)} mà quán vẫn mở${kids ? `, lại có ${kids} học sinh đang chơi` : ''}. Yêu cầu đóng cửa ngay!</p>
+      ${fine ? `<div class="fine">Vi phạm lần ${n} · Tiền phạt <b>-${money(fine)}</b></div>`
+        : '<div class="warn">⚠️ Lần đầu: cảnh cáo, chưa phạt tiền. Tái phạm sẽ bị phạt.</div>'}
+      ${n >= 2 ? '<p class="warn">⭐ Bị lập biên bản, hàng xóm đồn ầm lên: đánh giá quán giảm.</p>' : ''}
+      ${suspend ? '<p class="bad-text">🚫 Tái phạm nhiều lần: quán bị <b>đình chỉ ngày mai</b> (vẫn tốn mặt bằng).</p>' : ''}
+      <p class="muted small">Khách đang chơi được hoàn tiền giờ chưa chơi. ${C.NIGHT_STRIKE_RESET} ngày không vi phạm thì được xóa tiền án.</p>`,
+    actions: [{ label: fine ? 'Nộp phạt, đóng cửa 😭' : 'Dạ, em đóng cửa liền 🫡', cls: 'primary', onClick: () => closeModal() }],
+    onClose: () => { if (R && !R.over) endDay(); },
+  });
+  m.raid = true;
+}
+function announceClosing() {
+  R.closing = true;
+  log('🌙 Chuẩn bị đóng cửa — không nhận khách mới, khách đang chơi chơi nốt');
+  for (const pc of R.pcs) if (pc.cust && !pc.cust.awaitingLoad) fx(pc.el.root, '📢 Quán sắp đóng cửa', 'warn');
+}
+function reopen() {
+  R.closing = false;
+  R.spawnIn = Math.min(R.spawnIn, 1.5);
+  log('↩️ Quán mở cửa đón khách tiếp');
+}
+// Hộp thoại nút "Đóng cửa": chuẩn bị đóng (khách chơi nốt) hoặc đóng ngay (hoàn tiền)
+function openCloseMenu() {
+  if (!R || R.over) return;
+  const wasPaused = R.paused;
+  setPause(true);
+  const playing = R.pcs.filter(p => p.cust && !p.cust.awaitingLoad);
+  const refund = playing.reduce((s, p) => s + refundFor(p.cust), 0);
+  const last = playing.reduce((t, p) => Math.max(t, R.time + Math.max(0, p.cust.remaining)), R.time);
+  const n = playing.length + R.queue.length + R.pcs.filter(p => p.cust?.awaitingLoad).length;
+  const chooseNow = () => { closeModal(); closeNow(); };
+  openModal({
+    title: '🌙 Đóng cửa quán',
+    body: n ? `<p>Đang có <b>${playing.length}</b> khách chơi${R.queue.length ? ` và <b>${R.queue.length}</b> khách chờ ở cửa` : ''}.</p>
+      <p><b>Chuẩn bị đóng cửa:</b> không nhận khách mới, khách đã vào chơi nốt giờ${playing.length ? ` (người về muộn nhất khoảng <b>${clockText(last)}</b>)` : ''}. Hết khách quán tự đóng.</p>
+      <p><b>Đóng cửa ngay:</b> mời hết khách về${refund ? `, hoàn <b>${money(refund)}</b> tiền giờ chưa chơi. Khách sẽ hơi tiếc` : ''}.</p>`
+      : '<p>Quán đang vắng. Đóng cửa và tổng kết ngày luôn?</p>',
+    actions: n ? [
+      { label: 'Thôi', cls: 'ghost', onClick: closeModal },
+      { label: '🔒 Đóng ngay', cls: 'ghost', onClick: chooseNow },
+      { label: '🌙 Chuẩn bị đóng cửa', cls: 'primary', onClick: () => { closeModal(); announceClosing(); } },
+    ] : [
+      { label: 'Thôi', cls: 'ghost', onClick: closeModal },
+      { label: '🔒 Đóng cửa', cls: 'primary', onClick: chooseNow },
+    ],
+    onClose: () => { if (R && !R.over && !wasPaused) setPause(false); },
+  });
+}
+function closeNow() {
+  if (!R || R.over) return;
+  log(`🔒 Đóng cửa lúc ${clockText(R.time)}`);
+  endDay();
+}
+function toggleShutter() {
+  if (!R || R.over || R.time < C.NIGHT_FROM) return;
+  R.shutter = !R.shutter;
+  log(R.shutter ? '🚪 Kéo cửa cuốn — chỉ khách quen gọi cửa mới vào, đỡ lộ' : '🚪 Kéo cửa cuốn lên, đón khách bình thường');
+}
+function cycleSpeed() {
+  if (!R || R.over) return;
+  const i = C.SPEEDS.indexOf(R.speed);
+  R.speed = C.SPEEDS[(i + 1) % C.SPEEDS.length];
 }
 
 function tick(now) {
   const dt = Math.min(0.1, (now - lastFrame) / 1000);
   lastFrame = now;
   if (hold) hold.target[hold.prop] = Math.min(hold.max, hold.target[hold.prop] + hold.rate * dt);
-  if (R && !R.over && !R.paused) update(dt);
+  // tua nhanh: chạy logic nhiều bước mỗi khung hình (dừng ngay nếu hết ngày hoặc có sự kiện bắt tạm dừng)
+  for (let k = 0; R && k < R.speed && !R.over && !R.paused; k++) update(dt);
   if (R && !R.over) renderPlay(R.paused ? 0 : dt);
   if (modal && modal.update) modal.update();
   requestAnimationFrame(tick);
@@ -2778,7 +2943,7 @@ function renderQueue() {
         <div class="patience"><i></i></div>`
       : `${face}<div class="req"><b>${esc(c.name)}${knownIcon(c) ? ' ' + knownIcon(c) : ''}</b>
           ${c.staffProposal != null ? `<span class="cust-shy">⚠️ Nhân viên xin duyệt máy ${c.staffProposal + 1}</span>` : c.asked
-            ? `<span>${TIERS[c.tier].icon} ${TIERS[c.tier].short} · ${durText(c.hours)}</span>`
+            ? `<span>${TIERS[c.tier].icon} ${TIERS[c.tier].short} · ${c.overnight ? '🌙 Bao đêm' : durText(c.hours)}</span>`
             : `<span class="cust-shy">❔ Bấm để hỏi</span>`}
           ${c.regId ? `<span class="cust-reg">🔁 Lần ${c.visitNo}${c.favPc != null && c.favPc < R.pcs.length ? ` · ❤️ Máy ${c.favPc + 1}` : ''}</span>` : ''}</div>
         <div class="patience"><i></i></div>`;
@@ -2812,8 +2977,11 @@ function renderPlay(dt = 0) {
     : noisy ? '📢 Có khách làm ồn — bấm vào máy có 📢 để nhắc nhở.'
     : missing && !R.queue.length ? `🦹 ${missing} máy bị trộm mất đồ, chưa dùng được — sáng mai mua lại ở tab Nâng máy.`
     : busy ? `📝 ${busy} phiếu gọi món — làm đồ tại quầy${S.staff.length ? ', rồi giao nhân viên mang ra' : ' và mang ra'}`
-    : R.time >= C.LAST_ENTRY_HOUR ? '🌙 Sắp đóng cửa — không nhận khách mới.'
+    : R.closing ? '🌙 Đang chuẩn bị đóng cửa — không nhận khách mới, khách về hết thì quán tự đóng.'
+    : inNightBan() ? `👮 Đã quá ${C.NIGHT_POLICE_FROM}h — mở tiếp có thể bị công an kiểm tra${R.shutter ? ' (đã kéo cửa cuốn)' : ''}.`
+    : R.time >= C.NIGHT_FROM && !R.queue.length ? '🌙 Khuya rồi, khách thưa dần. Đóng cửa khi thấy không còn đáng mở.'
     : R.queue.length ? (S.staff.length ? 'Nhân viên đang tìm máy đúng nhu cầu cho khách.' : 'Bấm khách đang chờ để tự nạp giờ.') : '');
+  renderDoorCtl();
   const staffTask = nextStaffTask();
   const staffBtn = $('#staff-task-btn');
   staffBtn.hidden = !staffTask;
@@ -2854,6 +3022,19 @@ function renderInfra() {
   $('#infra').innerHTML = h;
 }
 
+// Nút đóng cửa, cửa cuốn ở khung Cửa quán + nút tua nhanh trên HUD
+function renderDoorCtl() {
+  const closeBtn = $('#btn-close'), shutterBtn = $('#btn-shutter'), reopenBtn = $('#btn-reopen');
+  setText(closeBtn, R.closing ? '🔒 Đóng ngay' : '🌙 Đóng cửa');
+  closeBtn.classList.toggle('warn', R.closing);
+  reopenBtn.hidden = !R.closing;
+  shutterBtn.hidden = R.time < C.NIGHT_FROM;
+  setText(shutterBtn, R.shutter ? '🚪 Kéo cửa lên' : '🚪 Kéo cửa cuốn');
+  shutterBtn.classList.toggle('on', R.shutter);
+  setText($('#btn-speed'), `⏩${R.speed}×`);
+  $('#btn-speed').classList.toggle('on', R.speed > 1);
+}
+
 const sceneHandlers = {
   pc: i => { if (R && R.pcs[i]) onPcClick(R.pcs[i]); },
   bubble: i => {
@@ -2862,6 +3043,7 @@ const sceneHandlers = {
     if (pc.cust && pc.cust.order) openKitchen(pc); else onPcClick(pc);
   },
   cust: id => { const c = R && R.queue.find(x => x.id === id); if (c) onQueueClick(c, $('#scene')); },
+  thief: () => { if (R && !R.over && R.escape) catchThief(); },
 };
 
 // ---------- Hết ngày ----------
@@ -2883,9 +3065,13 @@ function endDay() {
   renderPlay();
 
   const led = R.led;
-  // mặt bằng, mạng, điện: ghi vào hóa đơn tuần · xăng máy phát: trả tiền mặt ngay
-  const costs = { rent: rentCost(), net: netPlan().daily, power: round500(led.power), acPower: round500(led.acPower), fuel: round500(led.fuel), staff: S.staff.reduce((n, p) => n + p.wage, 0) };
-  S.money -= costs.fuel + costs.staff;
+  led.closedAt = R.time;
+  // mặt bằng, mạng, điện, đèn: ghi vào hóa đơn tuần · xăng máy phát, lương: trả tiền mặt ngay
+  // bị đình chỉ: nhân viên nghỉ ở nhà, không trả lương
+  const costs = { rent: rentCost(), net: netPlan().daily, power: round500(led.power), acPower: round500(led.acPower),
+    lights: round500(led.lights), fuel: round500(led.fuel), nightWage: round500(led.nightWage),
+    staff: R.suspended ? 0 : S.staff.reduce((n, p) => n + p.wage, 0) };
+  S.money -= costs.fuel + costs.staff + costs.nightWage;
   led.staff = costs.staff;
 
   S.pendingPolice += R.reports;   // tin báo công an chưa kịp tới → sáng mai tới
@@ -2940,7 +3126,7 @@ function closeBooks(day, costs) {
   const b = S.bill;
   b.rent += costs.rent;
   b.net += costs.net;
-  b.power += costs.power + costs.acPower;
+  b.power += costs.power + costs.acPower + costs.lights;
   b.days++;
   if (b.days >= C.BILL_DAYS) {
     const total = b.rent + b.net + b.power;
@@ -3074,10 +3260,11 @@ function ledgerHTML(led, costs, interest) {
   const row = (l, v, cls = '') => `<div class="sum-row ${cls}"><span>${l}</span><b>${v}</b></div>`;
   const plus = n => '+' + money(n), minus = n => '-' + money(n);
   const income = led.hours + led.food + led.tips + (led.thiefCash || 0);
-  const cash = [['🧑‍🍳 Lương nhân viên', costs.staff], ['🛢️ Xăng máy phát', costs.fuel], ['💸 Hoàn tiền giờ vì cúp điện', led.refund], ['🚨 Tiền phạt', led.fine], ['🏦 Lãi vay', interest]]
+  const cash = [['🧑‍🍳 Lương nhân viên', costs.staff], ['🌙 Lương ca đêm', costs.nightWage], ['🛢️ Xăng máy phát', costs.fuel], ['💸 Hoàn tiền giờ vì cúp điện', led.refund],
+    ['↩️ Hoàn tiền giờ khi đóng cửa', led.closeRefund], ['🚨 Tiền phạt', led.fine], ['🏦 Lãi vay', interest]]
     .filter(([, v]) => v);
-  const billed = [['⚡ Điện chạy máy', costs.power], ['❄️ Điện điều hòa', costs.acPower], ['🏠 Mặt bằng & bảo trì', costs.rent], ['📶 Tiền mạng', costs.net]]
-    .filter(([, v], i) => v || i === 0 || i === 2);
+  const billed = [['⚡ Điện chạy máy', costs.power], ['💡 Đèn biển hiệu buổi tối', costs.lights], ['❄️ Điện điều hòa', costs.acPower], ['🏠 Mặt bằng & bảo trì', costs.rent], ['📶 Tiền mạng', costs.net]]
+    .filter(([, v], i) => v || i === 0 || i === 3);
   const out = [...cash, ...billed].reduce((s, [, v]) => s + v, 0);
   const profit = income - out;
   const group = (title, sum, rows, cls) => `<details class="sum-group ${cls}"><summary>${row(title, sum, cls)}</summary>${rows}</details>`;
@@ -3092,6 +3279,11 @@ function ledgerHTML(led, costs, interest) {
 // Ghi chú hạ tầng trong ngày (nóng, mạng, cúp điện, phím) + tin về ngày mai
 function infraNotes(led) {
   const p = [];
+  if (R.suspended) p.push(['bad', '🚫 Hôm nay quán bị đình chỉ vì mở quá giờ nhiều lần: không mở cửa được, vẫn tốn mặt bằng.']);
+  else if (led.closedAt >= C.NIGHT_FROM) p.push(['note', `🌙 Mở tới ${clockText(led.closedAt)}${led.overnight ? ` · ${led.overnight} khách bao đêm` : ''}.`]);
+  if (led.raid) p.push(['bad', `👮 Công an kiểm tra lúc ${clockText(led.raid.time)}, buộc đóng cửa${led.raid.fine ? `, phạt ${money(led.raid.fine)}` : ' (cảnh cáo)'}. Vi phạm lần ${led.raid.n}.`]);
+  if (S.suspendDay === S.day) p.push(['bad', `🚫 <b>Ngày mai (ngày ${S.day}) quán bị đình chỉ</b>, không được mở cửa.`]);
+  else if (nightStrikes() && !R.suspended) p.push(['warn', `📋 Đang có ${S.nightStrikes} lần vi phạm giờ giấc. Thêm lần nữa: ${S.nightStrikes + 1 >= C.NIGHT_SUSPEND_AT ? 'bị đình chỉ 1 ngày' : `phạt ${money(C.NIGHT_FINES[Math.min(S.nightStrikes + 1, C.NIGHT_FINES.length) - 1])}`}.`]);
   if (led.hotHours >= 1) p.push(['warn', `🌡️ Quán nóng quá ${C.HOT_TEMP}°C suốt ${Math.round(led.hotHours)} giờ — máy dễ treo, khách mau bực.${S.upgrades.ac ? ' Nhớ bật điều hòa lúc trưa.' : ' Cân nhắc lắp điều hòa.'}`]);
   if (led.pingHours >= 1) p.push(['warn', `📶 Mạng quá tải ${Math.round(led.pingHours)} giờ — cân nhắc nâng gói mạng.`]);
   if (led.outages) p.push(['warn', `⚡ Cúp điện ${Math.round(led.darkHours * 10) / 10 || 0} giờ không có điện chạy máy${led.refund ? `, hoàn tiền giờ ${money(led.refund)}` : ''}.`]);
@@ -3143,7 +3335,7 @@ function showSummary({ led, costs, books, newlyExpired, spoiled, day, bankrupt }
     ${bankrupt ? `<p class="warn">💸 ${books.evicted ? 'Mất mặt bằng' : 'Quán nợ quá nhiều'} nên phải đóng cửa. Bản lưu cũ vẫn còn: thử lại ngày ${day} (trả hóa đơn, vay thêm cho kịp) hoặc chơi lại từ đầu.</p>`
       : S.money < 0 ? `<p class="warn">⚠️ Bạn đang nợ! Nợ quá ${money(-C.BANKRUPT_AT)} là phá sản.</p>` : ''}`;
   openModal({
-    title: bankrupt ? `💸 ${esc(S.shopName)} phá sản rồi…` : `🌙 ${esc(S.shopName)} · hết ngày ${day}`,
+    title: bankrupt ? `💸 ${esc(S.shopName)} phá sản rồi…` : R.suspended ? `🚫 ${esc(S.shopName)} · ngày ${day} bị đình chỉ` : `🌙 ${esc(S.shopName)} · hết ngày ${day}`,
     body, cls: 'modal-summary', dismissable: false,
     actions: bankrupt ? [
       { label: 'Chơi lại từ đầu', cls: 'ghost', onClick: () => { closeModal(); newGame(S.shopName); saveGame(); showPrep(); } },
@@ -3181,6 +3373,8 @@ function openHowTo() {
       <li><b>📒 Khách quen:</b> khách nhớ quán. Lần trước bực chuyện gì sẽ nhắc ở cửa — lặp lại lỗi cũ thì họ khó chịu gấp rưỡi, làm tốt thì thiện cảm tăng. Xếp đúng ❤️ máy quen cũng được lòng. Bị bỏ bê nhiều lần họ sẽ chuyển quán.</li>
       <li><b>💬 Nhận xét cuối ngày:</b> xem khách khen gì, chê gì; bấm vào từng khách để biết vì sao họ vui hay bực.</li>
       <li><b>🛠️ Nâng cấp máy:</b> nâng cả CPU và card đồ họa để lên hạng (Thường → Pre → VIP → Pro Max), khách chơi game nặng và streamer sẽ tìm tới. Chuột, phím, màn hình, bàn ghế xịn làm giá giờ cao hơn và khách vui hơn.</li>
+      <li><b>🌙 Đóng cửa:</b> quán không tự đóng — bạn tự chọn giờ, mở được tới 8h sáng hôm sau. Bấm <i>🌙 Đóng cửa</i> ở khung Cửa quán: <i>chuẩn bị đóng cửa</i> thì không nhận khách mới, khách chơi nốt rồi quán tự đóng; <i>đóng ngay</i> thì phải hoàn tiền giờ chưa chơi. Mở càng khuya càng tốn: từ 18h đèn, biển hiệu tính tiền theo giờ, sau 22h trả thêm lương ca đêm và nhân viên mệt hay ghi sai đơn. Từ 21h có khách xin <i>bao đêm</i> (trả trọn gói, chơi tới 6h).</li>
+      <li><b>👮 Mở quá giờ:</b> từ 23h tới 6h công an có thể ập vào kiểm tra — quán càng đông, có khách ồn hay học sinh thì càng dễ bị báo. Bị bắt là phải đóng cửa ngay; lần đầu cảnh cáo, sau đó phạt tiền, tái phạm nhiều lần bị đình chỉ một ngày. Từ 22h có nút <i>🚪 Kéo cửa cuốn</i>: chỉ khách quen gọi cửa mới vào, đỡ lộ hơn. Quán vắng thì bấm <i>⏩</i> trên cùng để tua nhanh.</li>
       <li><b>🌙 Cuối ngày:</b> xem thu chi, tiền điện và mặt bằng được ghi vào hóa đơn tuần. Sáng hôm sau nhập hàng (có hạn dùng!), xem dự báo thời tiết, lịch cúp điện và nâng cấp quán.</li>
       <li><b>☠️ Hàng hết date:</b> hàng cận date rẻ một nửa nhưng mau hết hạn. Hàng hết date vẫn bán được nhưng khách có thể đau bụng rồi báo công an — bị phạt nặng!</li>
     </ol>
@@ -3461,6 +3655,21 @@ function init() {
   });
   $('#staff-task-btn').addEventListener('click', () => openStaffTask(nextStaffTask()));
   $('#btn-pause').addEventListener('click', () => setPause(!R.paused));
+  $('#btn-speed').addEventListener('click', cycleSpeed);
+  $('#btn-close').addEventListener('click', () => {
+    if (!R || R.over) return;
+    if (!R.closing) return openCloseMenu();
+    const wasPaused = R.paused;   // đang chuẩn bị đóng: hỏi lại trước khi mời hết khách về
+    setPause(true);
+    const refund = R.pcs.reduce((s, p) => s + (p.cust && !p.cust.awaitingLoad ? refundFor(p.cust) : 0), 0);
+    openModal({ title: '🔒 Đóng cửa ngay?',
+      body: `<p>Mời hết khách về${refund ? ` và hoàn <b>${money(refund)}</b> tiền giờ chưa chơi` : ''}.</p>`,
+      actions: [{ label: 'Thôi', cls: 'ghost', onClick: closeModal },
+        { label: '🔒 Đóng ngay', cls: 'primary', onClick: () => { closeModal(); closeNow(); } }],
+      onClose: () => { if (R && !R.over && !wasPaused) setPause(false); } });
+  });
+  $('#btn-reopen').addEventListener('click', () => { if (R && !R.over && R.closing) reopen(); });
+  $('#btn-shutter').addEventListener('click', toggleShutter);
   PlayScene.mount($('#scene'), $('#rows'), sceneHandlers);
   $('#stock-list').addEventListener('click', e => {
     const b = e.target.closest('[data-buy], [data-near], [data-trash]');
