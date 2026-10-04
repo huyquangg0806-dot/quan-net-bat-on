@@ -112,6 +112,7 @@ const CONFIG = {
   HOST_REPLY_APOLOGY: 2,   // thiện cảm khi nhận lỗi trước khách chê
   HOST_REPLY_EXPLAIN: 1,
   HOST_REPLY_SASSY: -6,
+  HOST_REPLY_MAX_LENGTH: 500, // ký tự tối đa cho phản hồi tự viết
   HOST_PROMISE_GOOD: 6,    // làm tốt ở lần ghé sau khi đã hứa sửa
   HOST_PROMISE_BAD: -3,    // tái diễn đúng lỗi đã hứa sửa
   HOST_PROMISE_SAT: 70,    // hài lòng tối thiểu để coi là giữ lời

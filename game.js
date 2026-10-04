@@ -204,6 +204,10 @@ function normalizeHost() {
     S.nextReviewId = Math.max(S.nextReviewId, rv.id + 1);
     // Review cũ chỉ có tên: không đoán ID vì khách khác có thể dùng lại tên đó.
     if (rv.reply && !HOST_REPLIES[rv.reply.kind]) delete rv.reply;
+    if (rv.reply && 'text' in rv.reply) {
+      if (typeof rv.reply.text !== 'string' || !rv.reply.text.trim() || rv.reply.text.trim().length > C.HOST_REPLY_MAX_LENGTH) delete rv.reply.text;
+      else rv.reply.text = rv.reply.text.trim();
+    }
   }
   for (const r of S.regulars) {
     const p = r.replyPromise;
@@ -241,9 +245,14 @@ function hostTransaction(change) {
   try { CloudSave.save(S); return true; }
   catch (e) { S = JSON.parse(before); saveFailed(e); return false; }
 }
-function replyReview(id, kind) {
+const reviewReplyText = rv => rv.reply?.text || HOST_REPLIES[rv.reply?.kind]?.text || '';
+function replyReview(id, kind, text) {
   const rv = S.reviews.find(r => r.id === id), choice = HOST_REPLIES[kind];
   if (!rv || rv.reply || !choice) return false;
+  if (text !== undefined) {
+    if (typeof text !== 'string' || !text.trim() || text.trim().length > C.HOST_REPLY_MAX_LENGTH) return false;
+    text = text.trim();
+  }
   return hostTransaction(() => {
     const rec = regById(rv.regId);
     const delta = kind === 'sassy' ? C.HOST_REPLY_SASSY
@@ -251,6 +260,7 @@ function replyReview(id, kind) {
       : kind === 'thanks' && rv.stars >= 4 ? C.HOST_REPLY_THANKS
       : kind === 'explain' ? C.HOST_REPLY_EXPLAIN : 0;
     rv.reply = { kind, day: S.day, delta: rec ? delta : 0 };
+    if (text !== undefined) rv.reply.text = text;
     if (rec) {
       rec.aff = clamp(rec.aff + delta, 0, 100);
       const key = MEM_GROUP[rv.key] || (rv.key === 'sick' ? 'sick' : rv.key === 'nogame' && GAMES[rv.game] ? 'nogame' : null);
@@ -454,15 +464,31 @@ function hostNewsHTML() {
       : 'Khu phố đang tìm kẻ hay giả làm khách, nạp ít giờ rồi nhìn quanh máy. Đây là dấu hiệu để quan sát, chưa đủ kết luận một khách là trộm. Camera và khóa cáp giúp phòng mất đồ.');
 }
 function hostReviewsHTML() {
-  return `<p class="hint">Trả lời một lần mỗi đánh giá; sao cũ giữ nguyên. ${hostPlaying() ? 'Đang trong ca: chỉ đọc, sáng mai hãy trả lời.' : 'Xin lỗi rồi sửa đúng lỗi ở lần ghé sau mới được thêm thiện cảm.'}</p>`
-    + (S.reviews.length ? S.reviews.map(rv => {
+  // Chỉ xếp bản hiển thị: giữ lịch sử mới nhất trong từng nhóm và trong bản lưu.
+  const reviews = [...S.reviews.filter(rv => !rv.reply), ...S.reviews.filter(rv => rv.reply)];
+  const pending = reviews.filter(rv => !rv.reply).length;
+  return `<p class="host-status" role="status">Chưa trả lời: <b>${pending}</b> · Đã trả lời: <b>${reviews.length - pending}</b></p>
+    <p class="hint">Đánh giá chưa trả lời ở trên cùng. Trả lời một lần mỗi đánh giá; sao cũ giữ nguyên. ${hostPlaying() ? 'Đang trong ca: chỉ đọc, sáng mai hãy trả lời.' : 'Xin lỗi rồi sửa đúng lỗi ở lần ghé sau mới được thêm thiện cảm.'}</p>`
+    + (reviews.length ? reviews.map(rv => {
       const rec = regById(rv.regId);
-      const reply = rv.reply ? `<div class="host-reply"><b>Chủ quán · ngày ${rv.reply.day}</b><p>${esc(HOST_REPLIES[rv.reply.kind].text)}</p>
+      const draft = modal?.reviewDrafts?.[rv.id], disabled = hostPlaying() ? 'disabled' : '';
+      const reply = rv.reply ? `<div class="host-reply"><b>Chủ quán · ngày ${rv.reply.day}</b><p class="host-reply-text">${esc(reviewReplyText(rv))}</p>
         <p class="muted small">${rec ? `Thiện cảm khi trả lời: ${rv.reply.delta > 0 ? '+' : ''}${rv.reply.delta}.` : 'Review chưa liên kết với khách trong sổ quen; phản hồi vẫn được lưu.'}
         ${rec?.replyPromise?.reviewId === rv.id ? ' Khách đang chờ quán giữ lời ở lần ghé sau.' : ''}</p></div>`
         : `<div class="host-reply-actions">${Object.entries(HOST_REPLIES).map(([kind, choice]) => `<button class="btn small ${kind === 'sassy' ? 'danger' : ''}"
-          data-reply="${kind}" data-review-id="${rv.id}" ${hostPlaying() ? 'disabled' : ''}>${choice.label}</button>`).join('')}</div>`;
-      return `<article>${reviewHTML(rv, { hideReply: true })}${reply}</article>`;
+          data-reply="${kind}" data-review-id="${rv.id}" ${disabled}>${choice.label}</button>`).join('')}</div>
+          <details class="host-reply-editor" data-custom-review="${rv.id}" ${draft?.open ? 'open' : ''}>
+            <summary>✍️ Tự viết trả lời</summary>
+            <label for="reply-kind-${rv.id}">Thái độ trả lời</label>
+            <select id="reply-kind-${rv.id}" data-reply-kind="${rv.id}" ${disabled}>${Object.entries(HOST_REPLIES).map(([kind, choice]) => `<option value="${kind}" ${kind === (draft?.kind || 'explain') ? 'selected' : ''}>${choice.label}</option>`).join('')}</select>
+            <p class="hint">Thái độ quyết định thiện cảm như nút trả lời nhanh. Chọn xin lỗi là hứa sửa lỗi khách gặp.</p>
+            <label for="reply-text-${rv.id}">Nội dung trả lời</label>
+            <textarea id="reply-text-${rv.id}" data-reply-text="${rv.id}" maxlength="${C.HOST_REPLY_MAX_LENGTH}" rows="3" placeholder="Viết lời trả lời của chủ quán…" ${disabled}>${esc(draft?.text || '')}</textarea>
+            <p class="muted small" data-reply-count="${rv.id}">${(draft?.text || '').length}/${C.HOST_REPLY_MAX_LENGTH} ký tự</p>
+            <p class="bad-text small" data-reply-error="${rv.id}" role="alert"></p>
+            <button class="btn primary" data-reply-custom="${rv.id}" ${disabled}>Gửi trả lời</button>
+          </details>`;
+      return `<article data-review-card="${rv.id}">${reviewHTML(rv, { hideReply: true })}${reply}</article>`;
     }).join('') : '<p class="note">Chưa có review. Mở cửa đón khách, rồi quay lại xem nhé!</p>');
 }
 function hostLoanHTML(kind) {
@@ -504,8 +530,9 @@ function hostDiceHTML() {
     <p class="hint">Tự chơi: phạt ít nhất ${money(C.HOST_GAMBLE_FINE)} hoặc ${C.HOST_GAMBLE_FINE_RATE * 100}% tiền cao nhất ngày. Giới thiệu khách: ít nhất ${money(C.HOST_GAMBLE_ORG_FINE)} hoặc ${C.HOST_GAMBLE_ORG_RATE * 100}%, đình chỉ 1 ngày. Ngày không cược mới giảm ${C.HOST_GAMBLE_DECAY} điểm nghi ngờ.</p>
     <div class="host-ban"><b>${g.banned ? '🚫 Đang treo bảng CẤM CỜ BẠC' : 'Chưa treo bảng cấm cờ bạc'}</b><p>Chặn khách đặt lượt mới; lượt đã cược giải quyết xong. Bảng không xóa lịch sử vi phạm và không chặn chủ tự chơi.</p><button class="btn" data-gamble-ban="${g.banned ? 'off' : 'on'}">${g.banned ? 'Gỡ bảng cấm' : 'Dán bảng Cấm cờ bạc'}</button></div>${customers}`;
 }
-function renderHostApp(app = 'desktop') {
+function renderHostApp(app = 'desktop', keepScroll = false) {
   if (!modal?.host) return;
+  const scrollTop = keepScroll ? modal.bodyEl.scrollTop : 0;
   modal.hostApp = app;
   const title = HOST_APPS.find(a => a.id === app);
   const desktop = `<p class="host-status">Xin chào chủ quán · ${esc(S.shopName)} · ngày ${dayText()}</p>
@@ -513,7 +540,7 @@ function renderHostApp(app = 'desktop') {
   modal.bodyEl.innerHTML = `<div class="host-toolbar">${app !== 'desktop' ? '<button class="btn small ghost" data-host-app="desktop">← Các app</button>' : ''}
     <span>${title ? `${title.icon} ${title.name}` : '🖥️ Máy tính chủ'}</span><b>${money(S.money)}</b></div><div class="host-content">`
     + (app === 'news' ? hostNewsHTML() : app === 'reviews' ? hostReviewsHTML() : ['bank', 'shark'].includes(app) ? hostLoanHTML(app) : app === 'dice' ? hostDiceHTML() : desktop) + '</div>';
-  modal.bodyEl.scrollTop = 0;
+  modal.bodyEl.scrollTop = scrollTop;
 }
 function openHost() {
   if (!S || atTitle || (modal && !modal.dismissable)) return;
@@ -524,6 +551,23 @@ function openHost() {
     actions: [{ label: '🏠 Về tiêu đề', cls: 'ghost', onClick: returnToTitle }, { label: 'Đóng máy chủ', cls: 'primary', onClick: closeModal }],
     onClose: () => { if (hostPlaying() && !wasPaused) setPause(false); } });
   m.host = true;
+  m.reviewDrafts = {};
+  const rememberDraft = e => {
+    const input = e.target, id = input.dataset.replyText || input.dataset.replyKind;
+    if (!id) return;
+    const draft = m.reviewDrafts[id] ||= { text: '', kind: 'explain', open: true };
+    if (input.dataset.replyText) {
+      draft.text = input.value;
+      m.bodyEl.querySelector(`[data-reply-count="${id}"]`).textContent = `${input.value.length}/${C.HOST_REPLY_MAX_LENGTH} ký tự`;
+      m.bodyEl.querySelector(`[data-reply-error="${id}"]`).textContent = '';
+    } else draft.kind = input.value;
+  };
+  m.bodyEl.addEventListener('input', rememberDraft);
+  m.bodyEl.addEventListener('change', rememberDraft);
+  m.bodyEl.addEventListener('toggle', e => {
+    const id = e.target.dataset.customReview;
+    if (id) (m.reviewDrafts[id] ||= { text: '', kind: 'explain' }).open = e.target.open;
+  }, true);
   m.bodyEl.addEventListener('click', e => {
     const b = e.target.closest('button');
     if (!b || b.disabled) return;
@@ -533,6 +577,16 @@ function openHost() {
     if (b.dataset.betPreset) { m.bodyEl.querySelector('#host-bet').value = b.dataset.betPreset; m.hostBet = +b.dataset.betPreset; return; }
     let ok = false;
     if (b.dataset.reply) ok = replyReview(+b.dataset.reviewId, b.dataset.reply);
+    else if (b.dataset.replyCustom) {
+      const id = b.dataset.replyCustom, input = m.bodyEl.querySelector(`[data-reply-text="${id}"]`);
+      const kind = m.bodyEl.querySelector(`[data-reply-kind="${id}"]`).value;
+      if (!input.value.trim() || input.value.trim().length > C.HOST_REPLY_MAX_LENGTH) {
+        m.bodyEl.querySelector(`[data-reply-error="${id}"]`).textContent = `Viết từ 1 đến ${C.HOST_REPLY_MAX_LENGTH} ký tự trước khi gửi.`;
+        input.focus({ preventScroll: true });
+        return;
+      }
+      ok = replyReview(+id, kind, input.value);
+    }
     else if (b.dataset.diceSide) {
       const input = m.bodyEl.querySelector('#host-bet'), bet = +input.value;
       if (!validDiceBet(bet) || bet > S.money || !Number.isSafeInteger(S.money + bet)) {
@@ -559,7 +613,12 @@ function openHost() {
       if (!['bank', 'shark'].includes(kind)) return;
       ok = b.dataset.borrow ? borrow(kind, +b.dataset.amt) : repay(kind, +b.dataset.amt);
     }
-    if (ok && modal === m) { if (!hostPlaying()) renderPrep(); renderHostApp(m.hostApp); }
+    if (ok && modal === m) {
+      const replied = b.dataset.reviewId || b.dataset.replyCustom;
+      if (replied) delete m.reviewDrafts[replied];
+      if (!hostPlaying()) renderPrep();
+      renderHostApp(m.hostApp, !!replied);
+    }
   });
   renderHostApp();
 }
@@ -1309,7 +1368,7 @@ function reviewHTML(rv, options = {}) {
       <div><b>${esc(rv.name)}</b>${sub ? `<div class="rv-guide">${esc(sub)}</div>` : ''}</div></div>
     <div class="rv-meta">${starsHTML(rv.stars)}<span class="muted small">Ngày ${rv.day} · ${rv.time}</span></div>
     <p class="rv-text">${esc(rv.text)}</p>
-    ${rv.reply && !options.hideReply ? `<p class="muted small">💬 Chủ quán đã trả lời · ${esc(HOST_REPLIES[rv.reply.kind]?.text || '')}</p>` : ''}
+    ${rv.reply && !options.hideReply ? `<p class="muted small host-reply-text">💬 Chủ quán đã trả lời · ${esc(reviewReplyText(rv))}</p>` : ''}
   </div>`;
 }
 
@@ -4120,7 +4179,7 @@ function openHowTo() {
        <li><b>🚪 Đón khách:</b> nhân viên tự dẫn khách vào máy đúng hạng, sạch và hoạt động tốt. Nhân viên đã đào tạo tự nạp đúng giờ khách yêu cầu; người chưa đào tạo vẫn chuyển quầy cho bạn giữ nút hoặc giữ Space. Nếu chỉ còn máy khác nhu cầu, nhân viên hỏi ý bạn trước khi dẫn khách vào.</li>
       <li><b>🧘 Nhịp quán:</b> khách tới thưa hơn khi còn nhiều việc chờ xử lý; sau mẹ gank, trộm hoặc công an có khoảng nghỉ đón khách. Nút <i>🦹 Bắt trộm</i>, <i>📢 Nhắc máy</i> và <i>🌙 Đóng cửa</i> nằm dưới cảnh quán, luôn hiện cả khi mở quầy. Việc khẩn cấp trả tua nhanh về ×1; hộp thoại nhắc khách ồn tạm dừng để bạn chọn.</li>
       <li><b>🏠 Về tiêu đề:</b> quay về màn Chơi tiếp / Chơi mới. Ca đang mở sẽ tạm dừng trong tab này; Chơi tiếp trở lại đúng ca. Tải lại hoặc đóng tab chỉ giữ mốc lưu buổi sáng.</li>
-      <li><b>🖥️ Máy tính chủ:</b> bấm màn hình ở quầy hoặc nút Máy chủ để mở Bảng tin phố, Đánh giá, Ngân hàng, Vay nóng và Tài xỉu. Đọc tin cúp điện, game hot, trend trước khi mở cửa. Rep review một lần, không đổi sao cũ; xin lỗi rồi làm tốt ở lần ghé sau mới thêm thiện cảm. Cà khịa làm mất thiện cảm. Quán tạm dừng khi mở máy chủ; trả lời, vay/trả nợ và tự chơi tài xỉu thực hiện buổi sáng.</li>
+      <li><b>🖥️ Máy tính chủ:</b> bấm màn hình ở quầy hoặc nút Máy chủ để mở Bảng tin phố, Đánh giá, Ngân hàng, Vay nóng và Tài xỉu. Đọc tin cúp điện, game hot, trend trước khi mở cửa. Đánh giá chưa trả lời ở trên cùng; trả lời nhanh hoặc tự viết tối đa ${C.HOST_REPLY_MAX_LENGTH} ký tự và chọn thái độ. Nháp giữ khi đổi app trong cửa sổ máy chủ; đóng máy chủ bỏ nháp. Rep một lần, không đổi sao cũ; xin lỗi rồi làm tốt ở lần ghé sau mới thêm thiện cảm. Cà khịa làm mất thiện cảm. Quán tạm dừng khi mở máy chủ; trả lời, vay/trả nợ và tự chơi tài xỉu thực hiện buổi sáng.</li>
       <li><b>🎲 Tài xỉu tiền game:</b> nhập tiền nguyên tùy ý, không giới hạn lượt; 3–10 Tài / 11–18 Xỉu, thắng nhận tổng x${C.HOST_DICE_PAYOUT} gồm vốn. Kết quả lưu trước khi quay. Chơi nhiều/cược lớn tăng nghi ngờ, bị bắt thì phạt theo tiền cao nhất ngày. Trong ca dùng app giới thiệu một lần mỗi khách người lớn; khách có tiền riêng, có thể từ chối hoặc thưởng một phần lãi khi thắng. Giới thiệu bị phát hiện còn đình chỉ 1 ngày, vẫn trả mặt bằng/lãi. Dán bảng cấm chặn khách đặt mới, giải quyết lượt đã cược, không xóa nghi ngờ. Một ngày không cược mới giảm nghi ngờ.</li>
       <li><b>🎮 Game:</b> quán chưa cài game khách muốn thì khách bỏ đi. Buổi sáng xem game nào đang 🔥 hot và mua thêm game trong <i>Thư viện game</i>.</li>
       <li><b>⏱️ Nạp giờ:</b> giữ nút để nạp, thả tay ngay vạch vàng. Nạp dư là cho không, nạp thiếu khách sẽ cáu.</li>

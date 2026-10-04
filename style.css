@@ -244,6 +244,15 @@ kbd { background: var(--panel2); border: 1px solid var(--line); border-radius: 5
 .host-news p { margin: 6px 0; }
 .host-reply { background: #E1F6F2; border-left: 3px solid #1FA89A; padding: 10px; margin: 0 0 16px; border-radius: 8px; }
 .host-reply-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.host-reply-editor { margin-bottom: 16px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; }
+.host-reply-editor summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 700; }
+.host-reply-editor summary::after { content: '▾'; margin-left: auto; }
+.host-reply-editor[open] summary::after { content: '▴'; }
+.host-reply-editor label { display: block; margin: 8px 0 4px; }
+.host-reply-editor textarea, .host-reply-editor select { width: 100%; min-width: 0; font: inherit; user-select: text; }
+.host-reply-editor select { min-height: 44px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: #FFFDF4; }
+.host-reply-editor textarea { resize: vertical; min-height: 90px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; }
+.host-reply-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .modal-host .btn { min-height: 44px; }
 .host-bets { display: grid; gap: 10px; }
 .host-bets > div { padding: 10px; background: #FFFDF4; border: 1px solid var(--line); border-radius: 10px; }
