@@ -187,6 +187,240 @@ function normalizeSave() {
   }
   normalizeAccounts();
   normalizeHost();
+  normalizeCards();
+}
+
+// ---------- Thẻ sưu tầm: kho, thị trường và giao dịch ----------
+const cardKeys = () => CARD_SETS.flatMap(s => CARD_PACKS.map(p => s.id + ':' + p.id));
+const cardById = id => CARD_CATALOG.find(c => c.id === id);
+const cardPackInfo = key => {
+  const [setId, packId] = String(key).split(':');
+  const set = CARD_SETS.find(s => s.id === setId), pack = CARD_PACKS.find(p => p.id === packId);
+  return set && pack ? { set, pack, ...C.CARD_PACK_PRICES[packId] } : null;
+};
+const cardCount = lots => (lots || []).reduce((n, lot) => n + lot.qty, 0);
+const cardHash = text => [...String(text)].reduce((n, ch) => Math.imul(n ^ ch.charCodeAt(0), 16777619) >>> 0, 2166136261) / 4294967296;
+const cardNews = (day = S.day) => CARD_MARKET_NEWS[(day - 1) % CARD_MARKET_NEWS.length];
+const cardRoundPrice = price => Math.max(C.CARD_PRICE_STEP, Math.round(price / C.CARD_PRICE_STEP) * C.CARD_PRICE_STEP);
+function cardPrice(id, day = S.day) {
+  const card = cardById(id);
+  if (!card) return 0;
+  const news = cardNews(day);
+  const applies = (!news.set || news.set === card.set) && (!news.rarities || news.rarities.includes(card.rarity));
+  const variation = 1 + (cardHash(day + ':' + id) * 2 - 1) * C.CARD_MARKET_VARIANCE;
+  return cardRoundPrice(C.CARD_BASE_PRICES[id] * clamp(variation * (applies ? news.factor : 1), C.CARD_MARKET_MIN, C.CARD_MARKET_MAX));
+}
+function normalizeCards() {
+  const raw = S.cards && typeof S.cards === 'object' ? S.cards : {};
+  const integer = n => Number.isSafeInteger(n) && n >= 0 ? n : 0;
+  const lots = arr => (Array.isArray(arr) ? arr : []).filter(l => l && Number.isSafeInteger(l.qty) && l.qty > 0 && Number.isSafeInteger(l.cost) && l.cost >= 0)
+    .map(l => ({ qty: Math.min(l.qty, C.CARD_COUNT_MAX), cost: l.cost }));
+  S.cards = { enabled: raw.enabled === true, packs: {}, owned: {}, nextOpen: Math.max(1, integer(raw.nextOpen)), opening: null, daily: null };
+  for (const key of cardKeys()) S.cards.packs[key] = lots(raw.packs?.[key]);
+  for (const card of CARD_CATALOG) S.cards.owned[card.id] = lots(raw.owned?.[card.id]);
+  S.cards.enabled ||= cardKeys().some(k => cardCount(S.cards.packs[k])) || CARD_CATALOG.some(c => cardCount(S.cards.owned[c.id]));
+  const pending = raw.opening;
+  if (pending && Number.isSafeInteger(pending.id) && pending.id > 0 && cardPackInfo(pending.key)
+    && Array.isArray(pending.ids) && pending.ids.length === C.CARD_PACK_SIZE
+    && pending.ids.every(id => cardById(id)?.set === cardPackInfo(pending.key).set.id)
+    && pending.ids.slice(0, -1).every(id => cardById(id).rarity === 'basic')) {
+    S.cards.opening = { id: pending.id, key: pending.key, ids: pending.ids.slice() };
+    S.cards.nextOpen = Math.max(S.cards.nextOpen, pending.id + 1);
+  }
+  const old = raw.daily?.day === S.day ? raw.daily : {};
+  const daily = S.cards.daily = { day: S.day, spent: integer(old.spent), imported: integer(old.imported), opened: integer(old.opened),
+    packSales: integer(old.packSales), cardSales: integer(old.cardSales), income: integer(old.income), cost: integer(old.cost), offers: [] };
+  const ids = new Set();
+  for (const offer of Array.isArray(old.offers) ? old.offers : []) {
+    if (!offer || typeof offer.id !== 'string' || ids.has(offer.id) || !Number.isSafeInteger(offer.price) || offer.price <= 0
+      || !['waiting', 'sold', 'declined', 'gone'].includes(offer.status) || !['pack', 'card'].includes(offer.kind)
+      || (offer.kind === 'pack' ? !cardPackInfo(offer.key) : !cardById(offer.cardId)) || typeof offer.name !== 'string') continue;
+    ids.add(offer.id);
+    daily.offers.push({ id: offer.id, kind: offer.kind, key: offer.key, cardId: offer.cardId, price: offer.price,
+      name: offer.name.slice(0, 80), gender: offer.gender === 'f' ? 'f' : 'm', status: offer.status, look: offer.look });
+    if (daily.offers.length >= C.CARD_DAILY_BUYERS) break;
+  }
+}
+function cardRarity(packId, roll) {
+  if (!C.CARD_PACK_PRICES[packId] || !Number.isFinite(roll) || roll < 0 || roll >= 1) return null;
+  let percent = roll * 100;
+  if (percent < C.CARD_MYTHIC_PERCENT) return 'mythic';
+  percent -= C.CARD_MYTHIC_PERCENT;
+  for (let i = 0; i < C.CARD_PACK_PRICES[packId].rates.length; i++) {
+    percent -= C.CARD_PACK_PRICES[packId].rates[i];
+    if (percent < 0) return CARD_RARITIES[i].id;
+  }
+  return 'legend';
+}
+function drawCardPack(key, random = Math.random) {
+  const info = cardPackInfo(key);
+  if (!info) return [];
+  const rarity = cardRarity(info.pack.id, random());
+  if (!rarity) return [];
+  return Array.from({ length: C.CARD_PACK_SIZE }, (_, i) => {
+    const pool = CARD_CATALOG.filter(c => c.set === info.set.id && c.rarity === (i === C.CARD_PACK_SIZE - 1 ? rarity : 'basic'));
+    return pool[Math.floor(random() * pool.length)].id;
+  });
+}
+let cardWriting = false;
+function cardTransaction(change) {
+  if (cardWriting || CloudSave.state().blocked || CloudSave.state().busy) return false;
+  const before = JSON.stringify(S);
+  cardWriting = true;
+  try { change(); CloudSave.save(S); return true; }
+  catch (e) { S = JSON.parse(before); saveFailed(e); return false; }
+  finally { cardWriting = false; }
+}
+function syncCardLedger() {
+  if (!hostPlaying()) return;
+  const daily = S.cards.daily;
+  R.led.cardIncome = daily.income; R.led.cardCost = daily.cost;
+  R.led.cardPackSales = daily.packSales; R.led.cardSales = daily.cardSales;
+  R.led.cardSpent = daily.spent; R.led.cardOpened = daily.opened;
+}
+function buyCardPacks(key, qty) {
+  normalizeCards();
+  const info = cardPackInfo(key), total = cardKeys().reduce((n, k) => n + cardCount(S.cards.packs[k]), 0);
+  if (hostPlaying() || !info || !Number.isSafeInteger(qty) || qty < 1 || total + qty > C.CARD_STOCK_MAX || S.money < info.buy * qty) return false;
+  return cardTransaction(() => {
+    S.money -= info.buy * qty; S.cards.enabled = true;
+    S.cards.packs[key].push({ qty, cost: info.buy });
+    S.cards.daily.spent += info.buy * qty; S.cards.daily.imported += qty;
+  });
+}
+function takeCardLot(lots) {
+  const cost = lots[0].cost;
+  if (--lots[0].qty === 0) lots.shift();
+  return cost;
+}
+function openCardPack(key) {
+  normalizeCards();
+  if (hostPlaying()) return false;
+  if (S.cards.opening) return S.cards.opening;
+  if (!cardPackInfo(key) || !cardCount(S.cards.packs[key])) return false;
+  let result;
+  const ok = cardTransaction(() => {
+    const cost = takeCardLot(S.cards.packs[key]), ids = drawCardPack(key);
+    if (ids.length !== C.CARD_PACK_SIZE) throw new Error(CARD_SHOP_COPY.failed);
+    // Chia hết giá vốn của gói cho các bản thẻ; bản trùng vẫn là hai món hàng.
+    ids.forEach((id, i) => S.cards.owned[id].push({ qty: 1, cost: i === ids.length - 1 ? cost - Math.floor(cost / ids.length) * (ids.length - 1) : Math.floor(cost / ids.length) }));
+    result = S.cards.opening = { id: S.cards.nextOpen++, key, ids };
+    S.cards.daily.opened++;
+  });
+  return ok ? result : false;
+}
+function finishCardOpening(id) {
+  if (!S.cards.opening || S.cards.opening.id !== id || hostPlaying()) return false;
+  return cardTransaction(() => { S.cards.opening = null; });
+}
+function cardShopView() {
+  normalizeCards();
+  return { money: S.money, canManage: !hostPlaying() && !CloudSave.state().blocked && !CloudSave.state().busy,
+    playing: hostPlaying(), stock: Object.fromEntries(cardKeys().map(k => [k, cardCount(S.cards.packs[k])])),
+    owned: Object.fromEntries(CARD_CATALOG.map(c => [c.id, cardCount(S.cards.owned[c.id])])),
+    costs: Object.fromEntries(CARD_CATALOG.map(c => [c.id, S.cards.owned[c.id][0]?.cost || 0])),
+    prices: Object.fromEntries(CARD_CATALOG.map(c => [c.id, cardPrice(c.id)])),
+    previous: Object.fromEntries(CARD_CATALOG.map(c => [c.id, cardPrice(c.id, Math.max(1, S.day - 1))])),
+    opening: S.cards.opening, offers: S.cards.daily.offers.filter(o => o.status === 'waiting' && R?.queue.some(c => c.cardBuyer === o.id)) };
+}
+function cardMarketHTML() {
+  const T = CARD_SHOP_COPY, news = cardNews();
+  const featured = CARD_CATALOG.filter(c => (!news.set || news.set === c.set) && (!news.rarities || news.rarities.includes(c.rarity)))
+    .filter(c => c.rarity !== 'basic').slice(-C.CARD_PACK_SIZE);
+  return `<h3>🎴 ${esc(news.title)}</h3><p>${esc(news.text)}</p><p class="hint">${T.marketHint} ${T.future}</p>`
+    + featured.map(c => `<p><b>${esc(c.name)}</b> · ${T.base}: ${money(C.CARD_BASE_PRICES[c.id])} · ${T.market}: <b>${money(cardPrice(c.id))}</b> · ${T.previous}: ${money(cardPrice(c.id, Math.max(1, S.day - 1)))}</p>`).join('');
+}
+function cardOfferItem(o) {
+  if (!o) return '';
+  const info = o.kind === 'pack' && cardPackInfo(o.key);
+  return info ? `${info.pack.name} · ${info.set.name}` : cardById(o.cardId)?.name || '';
+}
+function cardBuyerCustomer(offer) {
+  return { id: R.nextId++, cardBuyer: offer.id, name: offer.name, gender: offer.gender, avatar: '🎴',
+    seg: 'vanglai', trait: 'thuong', voice: 'vui', tier: 1, hours: 0, game: 'lmhb', lost: false, overnight: false,
+    asked: true, atCounter: false, regId: 0, ev: {}, causes: [], sat: 100,
+    patience: C.CARD_BUYER_PATIENCE, patienceMax: C.CARD_BUYER_PATIENCE,
+    look: offer.look && typeof offer.look === 'object' ? offer.look : ART.makeLook('vanglai', offer.gender),
+    line: offer.kind === 'pack' ? CARD_SHOP_COPY.requestPack(cardPackInfo(offer.key).pack.name, cardPackInfo(offer.key).set.name, money(offer.price))
+      : CARD_SHOP_COPY.requestCard(cardById(offer.cardId).name, money(offer.price)) };
+}
+function spawnCardBuyer() {
+  if (!hostPlaying() || !S.cards.enabled || R.closing || R.shutter || R.queue.length >= C.QUEUE_MAX || !powered()) return false;
+  const offers = S.cards.daily.offers;
+  let offer = offers.find(o => o.status === 'waiting' && !R.queue.some(c => c.cardBuyer === o.id));
+  if (!offer) {
+    if (offers.length >= C.CARD_DAILY_BUYERS) return false;
+    const available = cardKeys().filter(k => cardCount(S.cards.packs[k]));
+    const owned = CARD_CATALOG.filter(c => c.rarity !== 'basic' && cardCount(S.cards.owned[c.id]));
+    if (!available.length && !owned.length) return false;
+    const index = offers.length, visitor = CARD_VISITORS[index % CARD_VISITORS.length];
+    const seed = S.day + ':' + index, kind = index % 2 === 0 ? 'pack' : 'card';
+    offer = { ...visitor, id: seed, kind, status: 'waiting', look: ART.makeLook('vanglai', visitor.gender) };
+    if (kind === 'pack') {
+      const pool = available.length ? available : cardKeys();
+      offer.key = pool[Math.floor(cardHash(seed) * pool.length)]; offer.price = cardPackInfo(offer.key).sell;
+    } else {
+      const pool = owned.length ? owned : CARD_CATALOG.filter(c => c.rarity !== 'basic');
+      offer.cardId = pool[Math.floor(cardHash(seed) * pool.length)].id;
+      offer.price = cardRoundPrice(cardPrice(offer.cardId) * (C.CARD_OFFER_MIN + cardHash(seed + ':gia') * (C.CARD_OFFER_MAX - C.CARD_OFFER_MIN)));
+    }
+    offers.push(offer);
+  }
+  const c = cardBuyerCustomer(offer);
+  R.queue.push(c); renderQueue(); SFX.play('door'); log(CARD_SHOP_COPY.arrival(c.name));
+  return c;
+}
+function cardBuyerLeaves(c) {
+  const offer = S.cards.daily.offers.find(o => o.id === c.cardBuyer);
+  if (offer?.status === 'waiting') offer.status = 'gone';
+  const index = R.queue.indexOf(c);
+  if (index >= 0) R.queue.splice(index, 1);
+  log(CARD_SHOP_COPY.leaves(c.name)); renderQueue();
+}
+function sellToCardBuyer(c) {
+  const offer = S.cards.daily.offers.find(o => o.id === c?.cardBuyer);
+  if (!hostPlaying() || !R.queue.includes(c) || offer?.status !== 'waiting') return false;
+  const lots = offer.kind === 'pack' ? S.cards.packs[offer.key] : S.cards.owned[offer.cardId];
+  if (!cardCount(lots)) return false;
+  const ok = cardTransaction(() => {
+    const cost = takeCardLot(lots);
+    S.money += offer.price; recordBook('revenue', offer.price); recordBook('materials', cost);
+    const daily = S.cards.daily;
+    daily.income += offer.price; daily.cost += cost;
+    daily[offer.kind === 'pack' ? 'packSales' : 'cardSales']++;
+    offer.status = 'sold';
+  });
+  if (!ok) return false;
+  syncCardLedger(); R.queue.splice(R.queue.indexOf(c), 1); renderQueue();
+  SFX.play('coin'); log(CARD_SHOP_COPY.sale(c.name, cardOfferItem(offer), money(offer.price)));
+  return true;
+}
+function declineCardBuyer(c) {
+  const offer = S.cards.daily.offers.find(o => o.id === c?.cardBuyer);
+  if (!hostPlaying() || !R.queue.includes(c) || offer?.status !== 'waiting') return false;
+  if (!cardTransaction(() => { offer.status = 'declined'; })) return false;
+  R.queue.splice(R.queue.indexOf(c), 1); renderQueue(); return true;
+}
+function openCardBuyer(c) {
+  if (!hostPlaying() || !R.queue.includes(c)) return;
+  closeModal();
+  const T = CARD_SHOP_COPY, o = S.cards.daily.offers.find(x => x.id === c.cardBuyer);
+  if (o?.status !== 'waiting') return;
+  const paused = R.paused; setPause(true); c.atCounter = true;
+  const card = o.kind === 'card' && cardById(o.cardId), info = o.kind === 'pack' && cardPackInfo(o.key);
+  const count = cardCount(card ? S.cards.owned[card.id] : S.cards.packs[o.key]);
+  const cost = (card ? S.cards.owned[card.id] : S.cards.packs[o.key])[0]?.cost || 0;
+  const reference = card ? cardPrice(card.id) : info.sell;
+  const m = openModal({ title: '🎴 ' + T.buyTitle,
+    body: `<div class="talk">${faceSVG(c)}<div class="speech"><small>${esc(c.name)}</small>${esc(c.line)}</div></div>`
+      + (card ? `<div class="tcg-buyer-card">${window.CardAlbum.faceHTML(card)}</div>` : `<h3>${esc(cardOfferItem(o))}</h3>`)
+      + `<div class="tcg-quote"><p>${T.offer}: <b>${money(o.price, true)}</b></p><p>${T.comparison}: ${Math.round((o.price / reference - 1) * 100)}% · ${T.market}: ${money(reference)}</p>`
+      + `<p>${T.stock}: ${count} ${card ? T.copies : T.packs} · ${T.cost}: ${money(cost)}</p>${!count ? `<p class="bad">${T.missing}</p>` : ''}</div>`,
+    actions: [{ label: T.decline, cls: 'ghost', onClick: () => { if (declineCardBuyer(c)) closeModal(); } },
+      { label: T.sell, cls: 'primary', onClick: () => { if (sellToCardBuyer(c)) closeModal(); } }],
+    onClose: () => { c.atCounter = false; if (hostPlaying() && !paused) setPause(false); } });
+  m.card.classList.add('tcg-buyer-modal');
+  m.card.querySelector('.modal-actions .primary').disabled = !count || CloudSave.state().blocked || CloudSave.state().busy;
 }
 
 // ---------- Máy tính chủ: dữ liệu và giao dịch buổi sáng ----------
@@ -457,6 +691,7 @@ function hostNewsHTML() {
     + card('⚡ Điện lực thông báo', outage ? `Dự kiến cúp điện từ <b>${clockText(outage.from)} đến ${clockText(outage.to)}</b>. Kiểm tra UPS và máy phát trước khi mở cửa.`
       : 'Chưa có lịch cúp điện được báo trước hôm nay. Sự cố bất chợt vẫn có thể xảy ra.')
     + card('🌤️ Dự báo & lịch phố', todayHTML())
+    + `<article class="host-news">${cardMarketHTML()}</article>`
     + card(`🔥 ${hot.icon} ${hot.name}`, S.installed[S.hot] ? 'Quán đã cài game hot hôm nay. Kiểm tra máy đủ hạng để đón khách.'
       : `Quán chưa cài: giá <b>${money(hot.cost)}</b>, cần máy ${TIERS[hot.minTier].short}. Ghé tab Nâng máy để xem thư viện game.`)
     + card(`💬 Trend: ${trend.title}`, esc(trend.text))
@@ -532,6 +767,8 @@ function hostDiceHTML() {
 }
 function renderHostApp(app = 'desktop', keepScroll = false) {
   if (!modal?.host) return;
+  modal.cardDemoCleanup?.();
+  modal.cardDemoCleanup = null;
   const scrollTop = keepScroll ? modal.bodyEl.scrollTop : 0;
   modal.hostApp = app;
   const title = HOST_APPS.find(a => a.id === app);
@@ -539,7 +776,20 @@ function renderHostApp(app = 'desktop', keepScroll = false) {
     <div class="host-apps">${HOST_APPS.map(a => `<button class="host-app" data-host-app="${a.id}"><span aria-hidden="true">${a.icon}</span><b>${a.name}</b><small>${a.desc}</small></button>`).join('')}</div>`;
   modal.bodyEl.innerHTML = `<div class="host-toolbar">${app !== 'desktop' ? '<button class="btn small ghost" data-host-app="desktop">← Các app</button>' : ''}
     <span>${title ? `${title.icon} ${title.name}` : '🖥️ Máy tính chủ'}</span><b>${money(S.money)}</b></div><div class="host-content">`
-    + (app === 'news' ? hostNewsHTML() : app === 'reviews' ? hostReviewsHTML() : ['bank', 'shark'].includes(app) ? hostLoanHTML(app) : app === 'dice' ? hostDiceHTML() : desktop) + '</div>';
+    + (app === 'cards' ? '<div data-card-album></div>' : app === 'news' ? hostNewsHTML() : app === 'reviews' ? hostReviewsHTML() : ['bank', 'shark'].includes(app) ? hostLoanHTML(app) : app === 'dice' ? hostDiceHTML() : desktop) + '</div>';
+  if (app === 'cards') {
+    const refresh = () => {
+      if (hostPlaying()) renderPlay(); else renderPrep();
+      if (modal?.host) modal.bodyEl.querySelector('.host-toolbar > b').textContent = money(S.money);
+    };
+    modal.cardDemoCleanup = window.CardAlbum.mount(modal.bodyEl.querySelector('[data-card-album]'), {
+      read: cardShopView, money,
+      buy: (key, qty) => { const ok = buyCardPacks(key, qty); if (ok) refresh(); return ok; },
+      open: key => { const result = openCardPack(key); if (result) refresh(); return result; },
+      finish: finishCardOpening,
+      meet: id => { const c = R?.queue.find(c => c.cardBuyer === id); if (c) openCardBuyer(c); },
+    });
+  }
   modal.bodyEl.scrollTop = scrollTop;
 }
 function openHost() {
@@ -822,7 +1072,7 @@ function accountAdvice(b) {
 function reportHTML(b) {
   const row = (name, value) => `<div class="sum-row"><span>${name}</span><b>${money(value)}</b></div>`;
   return `<div class="account-report">${row('Doanh thu sau hoàn tiền', b.revenue + b.salvage - b.refunds)}
-    ${row('Giá vốn nguyên liệu', b.materials)}${row('Chi phí vận hành', b.operating)}
+    ${row('Giá vốn nguyên liệu và thẻ', b.materials)}${row('Chi phí vận hành', b.operating)}
     ${row('Lợi nhuận trước thuế', b.profit)}${row(b.free ? 'Thuế (kỳ đầu miễn)' : 'Thuế kỳ này', b.tax)}
     ${row('Lợi nhuận sau thuế', b.net)}${row('Tiền đầu tư riêng', b.investment)}${row('Thu thanh lý máy riêng', b.assetSales)}
     ${b.leisureOut ? `<p class="muted small">🎲 Giải trí riêng: cược ${money(b.leisureOut)}, nhận ${money(b.leisureIn)}. Không tính vào lãi và thuế kinh doanh.</p>` : ''}
@@ -1024,6 +1274,7 @@ function closeModal() {
   modal = null;
   stopHold();
   m.overlay.remove();
+  m.cardDemoCleanup?.();
   if (m.docked) { $('#dock').classList.remove('open'); syncSceneCrop(); }
   if (m.onClose) m.onClose();
 }
@@ -1939,13 +2190,17 @@ function changeNet(id) {
 //  TRONG NGÀY
 // =====================================================================
 function startDay() {
+  normalizeCards();
   R = {
     time: C.OPEN_HOUR, paused: false, over: false,
+    cardSpawnIn: C.CARD_BUYER_START_SECONDS,
     spawnIn: 1.5, queue: [], selected: null, pick: null, nextId: 1,
     pcs: S.machines.map((m, i) => ({ i, m, tier: machineTier(m), cust: null, dirty: false, cleaningBy: null, cleanIn: 0,
       broken: false, repair: 0, brokeFor: 0, breakLoss: 0, el: null, bubbleKey: '' })),
     led: { pingHours: 0, hours: 0, food: 0, tips: 0, power: 0, staff: 0, staffMistakes: 0, served: 0, walkouts: 0, satSum: 0, ratingBefore: S.rating, reviews: [], lost: {}, fine: 0, sick: 0, visits: [],
       returning: 0, newFaces: 0, gone: [], replyNotes: [],
+      cardIncome: S.cards.daily.income, cardCost: S.cards.daily.cost, cardSpent: S.cards.daily.spent,
+      cardPackSales: S.cards.daily.packSales, cardSales: S.cards.daily.cardSales, cardOpened: S.cards.daily.opened,
       leisureIn: S.casino.day === S.day ? S.casino.paid : 0, leisureOut: S.casino.day === S.day ? S.casino.wagered : 0,
       gambleTips: 0, gambleFine: S.gambling.lastCase?.day === S.day ? S.gambling.lastCase.fine : 0,
       gambleCase: S.gambling.lastCase?.day === S.day ? S.gambling.lastCase : null, gambleInvites: 0, gambleWagered: 0, gambleNotes: [],
@@ -2532,6 +2787,7 @@ function leaveLost(c) {
 }
 
 function walkout(c) {
+  if (c.cardBuyer) return cardBuyerLeaves(c);
   R.queue.splice(R.queue.indexOf(c), 1);
   if (R.selected === c) R.selected = null;
   R.led.walkouts++;
@@ -2553,6 +2809,7 @@ const faceSVG = (c, mood = 'smile') =>
 
 // Máy nên gợi ý cho khách: trống, sạch, đủ hạng mà không dư nhiều nhất
 function bestPc(c) {
+  if (c.cardBuyer) return null;
   const free = R.pcs.filter(p => !p.cust && !p.m.missing);
   const score = p => (p.tier >= c.tier ? 0 : 100 * (c.tier - p.tier)) + (p.dirty ? 30 : 0) + (p.tier - c.tier) * 3
     + (c.favPc === p.i ? -20 : 0);
@@ -2564,6 +2821,7 @@ function availableStaff() {
 
 // Nhân viên tự chọn máy đúng hạng, sạch và hoạt động tốt. Máy khác hạng cần chủ quán duyệt.
 function staffChoice(c) {
+  if (c.cardBuyer) return null;
   const free = R.pcs.filter(p => !p.cust && !p.dirty && !p.cleaningBy && !p.broken && p.m.wear > 0 && !p.m.missing);
   const exact = free.filter(p => p.tier === c.tier).sort((a, b) => (b.i === c.favPc) - (a.i === c.favPc))[0];
   if (exact) return { pc: exact, approved: true };
@@ -2630,7 +2888,7 @@ function updateStaff(dt) {
     R.led.staffLoads++;
   }
   for (const c of [...R.queue]) {
-    if (c.lost || c.atCounter) continue;
+    if (c.lost || c.atCounter || c.cardBuyer) continue;
     const worker = availableStaff();
     if (!worker) break;
     const choice = staffChoice(c);
@@ -2762,6 +3020,7 @@ const overnightPrice = (pc, c) => round500(C.OVERNIGHT_PAY_HOURS * payRate(pc, c
 const refundFor = c => c.loaded > 0 ? round500((c.paid || 0) * clamp(c.remaining / c.loaded, 0, 1)) : 0;
 
 function seat(pc, c, loaded) {
+  if (c.cardBuyer) return;
   if (pc.m.missing) return;
   const guided = !!(c.awaitingLoad && pc.cust === c);
   if (!guided && (pc.cust || !R.queue.includes(c))) return;
@@ -3374,6 +3633,15 @@ function update(dt) {
   const on = powered();
 
   if (!R.closing && !R.escape && R.paceRest <= 0) {
+    if (S.cards.enabled) {
+      R.cardSpawnIn -= dt;
+      if (R.cardSpawnIn <= 0) {
+        if (R.queue.length < C.QUEUE_MAX && on) {
+          spawnCardBuyer();
+          R.cardSpawnIn = C.CARD_BUYER_INTERVAL;
+        }
+      }
+    }
     R.spawnIn -= dt;
     if (R.spawnIn <= 0) {
       if (R.queue.length < C.QUEUE_MAX && on) spawnCustomer(R.thiefAt != null && R.time >= R.thiefAt);   // quán tối om thì không ai vào
@@ -3649,6 +3917,7 @@ function buildFloor() {
 // Bấm khách ở cửa (thẻ bên dưới hoặc người trong cảnh): mở quầy nạp giờ cho khách đó
 function onQueueClick(c, target) {
   if (!R || R.over || !R.queue.includes(c)) return;
+  if (c.cardBuyer) return openCardBuyer(c);
   if (c.lost) return fx(target, 'Quán chưa cài game này', 'warn');
   if (!powered()) return fx(target, S.upgrades.gen ? 'Cúp điện — nổ máy phát trước đã' : 'Cúp điện, chưa mở máy được', 'warn');
   if (c.staffProposal != null && availableStaff()) return openStaffApproval(c);
@@ -3729,7 +3998,9 @@ function renderQueue() {
       (c.lost ? ' lost' : '') + (c.shown ? '' : ' enter'));
     c.shown = true;
     const face = c.look ? faceSVG(c, c.lost ? 'hungry' : 'idle') : `<div class="avatar">${c.avatar}</div>`;
-    card.innerHTML = c.lost
+    card.innerHTML = c.cardBuyer
+      ? `${face}<div class="req"><b>${esc(c.name)}</b><span>🎴 ${esc(cardOfferItem(S.cards.daily.offers.find(o => o.id === c.cardBuyer)))}</span></div><div class="patience"><i></i></div>`
+      : c.lost
       ? `${face}<div class="req"><b>${esc(c.name)}</b><span>❌ Chưa có ${gameIcon(c.game)}</span></div>
         <div class="patience"><i></i></div>`
       : `${face}<div class="req"><b>${esc(c.name)}${knownIcon(c) ? ' ' + knownIcon(c) : ''}</b>
@@ -3779,6 +4050,7 @@ function renderPlay(dt = 0) {
     : R.paceRest > 0 ? '🧘 Tạm nghỉ đón khách sau sự kiện — tranh thủ xử lý việc còn lại.'
     : inNightBan() ? `👮 Đã quá ${C.NIGHT_POLICE_FROM}h — mở tiếp có thể bị công an kiểm tra${R.shutter ? ' (đã kéo cửa cuốn)' : ''}.`
     : R.time >= C.NIGHT_FROM && !R.queue.length ? '🌙 Khuya rồi, khách thưa dần. Đóng cửa khi thấy không còn đáng mở.'
+    : R.queue.some(c => c.cardBuyer) ? CARD_SHOP_COPY.waiting + ' · ' + CARD_SHOP_COPY.meet
     : R.queue.length ? (S.staff.length ? 'Nhân viên đang tìm máy đúng nhu cầu cho khách.' : 'Bấm khách đang chờ để tự nạp giờ.') : '');
   renderDoorCtl();
   const staffTask = nextStaffTask();
@@ -3860,6 +4132,7 @@ function endDay() {
   for (const pc of R.pcs) if (pc.cust) {
     if (pc.cust.awaitingLoad) leaveUnloaded(pc); else leave(pc, 'close');
   }
+  for (const c of R.queue.filter(c => c.cardBuyer)) cardBuyerLeaves(c);
   R.queue = [];
   R.selected = null;
   renderQueue();
@@ -4068,7 +4341,7 @@ function regularsLine() {
 function ledgerHTML(led, costs, interest) {
   const row = (l, v, cls = '') => `<div class="sum-row ${cls}"><span>${l}</span><b>${v}</b></div>`;
   const plus = n => '+' + money(n), minus = n => '-' + money(n);
-  const income = led.hours + led.food + led.tips + (led.thiefCash || 0) + (led.salvage || 0);
+  const income = led.hours + led.food + led.tips + (led.thiefCash || 0) + (led.salvage || 0) + (led.cardIncome || 0);
   const cash = [['🧑‍🍳 Lương nhân viên', costs.staff], ['🌙 Lương ca đêm', costs.nightWage], ['🛢️ Xăng máy phát', costs.fuel], ['💸 Hoàn tiền giờ vì cúp điện', led.refund],
     ['↩️ Hoàn tiền giờ khi đóng cửa', led.closeRefund], ['🚨 Tiền phạt', led.fine], ['🏦 Lãi vay', interest]]
     .filter(([, v]) => v);
@@ -4079,10 +4352,12 @@ function ledgerHTML(led, costs, interest) {
   const profit = income - out - materials - prep;
   const group = (title, sum, rows, cls) => `<details class="sum-group ${cls}"><summary>${row(title, sum, cls)}</summary>${rows}</details>`;
   return `<div class="sum-block">
-    ${group('💰 Thu', plus(income), row('⏱️ Tiền giờ chơi', plus(led.hours)) + row('🍜 Bán đồ ăn uống', plus(led.food)) + row('💝 Tiền tip', plus(led.tips)) + (led.thiefCash ? row('🦹 Thưởng / bắt đền trộm', plus(led.thiefCash)) : '') + (led.salvage ? row('♻️ Thu hồi đồ thải', plus(led.salvage)) : ''), 'up')}
+    ${group('💰 Thu', plus(income), row('⏱️ Tiền giờ chơi', plus(led.hours)) + row('🍜 Bán đồ ăn uống', plus(led.food)) + row('💝 Tiền tip', plus(led.tips)) + (led.thiefCash ? row('🦹 Thưởng / bắt đền trộm', plus(led.thiefCash)) : '') + (led.salvage ? row('♻️ Thu hồi đồ thải', plus(led.salvage)) : '') + (led.cardIncome ? row('🎴 ' + CARD_SHOP_COPY.income, plus(led.cardIncome)) : ''), 'up')}
     ${cash.length ? group('💵 Chi phí & hoàn tiền', minus(cash.reduce((s, [, v]) => s + v, 0)), cash.map(([l, v]) => row(l, minus(v))).join(''), 'down') : ''}
     ${group('🧾 Ghi vào hóa đơn tuần', minus(billed.reduce((s, [, v]) => s + v, 0)), billed.map(([l, v]) => row(l, minus(v))).join(''), 'down')}
-    ${row('🍳 Giá vốn nguyên liệu đã dùng/bỏ', minus(materials))}
+    ${row('🍳 Giá vốn nguyên liệu và thẻ đã dùng/bán/bỏ', minus(materials))}
+    ${led.cardCost ? `<p class="hint">🎴 ${CARD_SHOP_COPY.expense}: ${money(led.cardCost)} — đã nằm trong giá vốn bên trên.</p>` : ''}
+    ${led.cardSpent || led.cardPackSales || led.cardSales || led.cardOpened ? `<p class="note">🎴 ${CARD_SHOP_COPY.summary}: ${CARD_SHOP_COPY.spent} ${money(led.cardSpent || 0)} · ${CARD_SHOP_COPY.soldPacks} ${led.cardPackSales || 0} · ${CARD_SHOP_COPY.soldCards} ${led.cardSales || 0} · ${CARD_SHOP_COPY.opened} ${led.cardOpened || 0}. Tiền nhập gói chuyển thành hàng tồn; chỉ ghi giá vốn khi bán.</p>` : ''}
     ${prep ? row('🧮 Chi phí sáng, kế toán & phạt hóa đơn', minus(prep)) : ''}
     ${row(profit >= 0 ? 'Lãi hôm nay trước thuế' : 'Lỗ hôm nay trước thuế', (profit >= 0 ? '+' : '') + money(profit), 'total ' + (profit >= 0 ? 'up' : 'down'))}
     ${led.leisureOut ? `<p class="note">🎲 Giải trí riêng buổi sáng: cược ${money(led.leisureOut)}, nhận ${money(led.leisureIn)}; chênh lệch ${money(led.leisureIn - led.leisureOut)}. Đã tính vào tiền quán, tách khỏi lãi kinh doanh bên trên.</p>` : ''}
@@ -4176,6 +4451,7 @@ function openHowTo() {
   openModal({
     title: '📖 Cách chơi',
     body: `<ol class="howto">
+      <li><b>🎴 ${CARD_COPY.app}:</b> ${CARD_COPY.help}</li>
        <li><b>🚪 Đón khách:</b> nhân viên tự dẫn khách vào máy đúng hạng, sạch và hoạt động tốt. Nhân viên đã đào tạo tự nạp đúng giờ khách yêu cầu; người chưa đào tạo vẫn chuyển quầy cho bạn giữ nút hoặc giữ Space. Nếu chỉ còn máy khác nhu cầu, nhân viên hỏi ý bạn trước khi dẫn khách vào.</li>
       <li><b>🧘 Nhịp quán:</b> khách tới thưa hơn khi còn nhiều việc chờ xử lý; sau mẹ gank, trộm hoặc công an có khoảng nghỉ đón khách. Nút <i>🦹 Bắt trộm</i>, <i>📢 Nhắc máy</i> và <i>🌙 Đóng cửa</i> nằm dưới cảnh quán, luôn hiện cả khi mở quầy. Việc khẩn cấp trả tua nhanh về ×1; hộp thoại nhắc khách ồn tạm dừng để bạn chọn.</li>
       <li><b>🏠 Về tiêu đề:</b> quay về màn Chơi tiếp / Chơi mới. Ca đang mở sẽ tạm dừng trong tab này; Chơi tiếp trở lại đúng ca. Tải lại hoặc đóng tab chỉ giữ mốc lưu buổi sáng.</li>
