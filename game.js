@@ -193,22 +193,32 @@ function normalizeSave() {
 // ---------- Thẻ sưu tầm: kho, thị trường và giao dịch ----------
 const cardKeys = () => CARD_SETS.flatMap(s => CARD_PACKS.map(p => s.id + ':' + p.id));
 const cardById = id => CARD_CATALOG.find(c => c.id === id);
-const cardPackInfo = key => {
+const cardPackInfo = (key, day = S.day, tick = cardMarketTick()) => {
   const [setId, packId] = String(key).split(':');
   const set = CARD_SETS.find(s => s.id === setId), pack = CARD_PACKS.find(p => p.id === packId);
-  return set && pack ? { set, pack, ...C.CARD_PACK_PRICES[packId] } : null;
+  if (!set || !pack || key !== set.id + ':' + pack.id) return null;
+  const base = C.CARD_PACK_PRICES[packId], factor = cardMarketFactor(set.id, 'pack', day, tick);
+  const price = n => Math.round(n * factor / C.CARD_PACK_PRICE_STEP) * C.CARD_PACK_PRICE_STEP;
+  return { set, pack, ...base, baseBuy: base.buy, baseSell: base.sell, buy: price(base.buy), sell: price(base.sell) };
 };
 const cardCount = lots => (lots || []).reduce((n, lot) => n + lot.qty, 0);
 const cardHash = text => [...String(text)].reduce((n, ch) => Math.imul(n ^ ch.charCodeAt(0), 16777619) >>> 0, 2166136261) / 4294967296;
 const cardNews = (day = S.day) => CARD_MARKET_NEWS[(day - 1) % CARD_MARKET_NEWS.length];
 const cardRoundPrice = price => Math.max(C.CARD_PRICE_STEP, Math.round(price / C.CARD_PRICE_STEP) * C.CARD_PRICE_STEP);
-function cardPrice(id, day = S.day) {
+const cardMarketTick = () => Math.floor(Date.now() / C.CARD_MARKET_INTERVAL_MS);
+function cardMarketFactor(setId, key, day = S.day, tick = cardMarketTick(), rarity = null) {
+  const news = cardNews(day);
+  const applies = (!news.set || news.set === setId) && (!news.rarities || news.rarities.includes(rarity));
+  // Hai sóng nhỏ giữ giá thay đổi từ từ; cùng nhịp/cùng bản lưu không quay giá lại.
+  const phase = cardHash(setId + ':' + key) * Math.PI * 2;
+  const variation = 1 + C.CARD_MARKET_VARIANCE * (Math.sin(tick / C.CARD_MARKET_SLOW_TICKS + phase) * C.CARD_MARKET_SLOW_WEIGHT
+    + Math.sin(tick / C.CARD_MARKET_FAST_TICKS + phase) * (1 - C.CARD_MARKET_SLOW_WEIGHT));
+  return clamp(variation * (applies ? news.factor : 1), C.CARD_MARKET_MIN, C.CARD_MARKET_MAX);
+}
+function cardPrice(id, day = S.day, tick = cardMarketTick()) {
   const card = cardById(id);
   if (!card) return 0;
-  const news = cardNews(day);
-  const applies = (!news.set || news.set === card.set) && (!news.rarities || news.rarities.includes(card.rarity));
-  const variation = 1 + (cardHash(day + ':' + id) * 2 - 1) * C.CARD_MARKET_VARIANCE;
-  return cardRoundPrice(C.CARD_BASE_PRICES[id] * clamp(variation * (applies ? news.factor : 1), C.CARD_MARKET_MIN, C.CARD_MARKET_MAX));
+  return cardRoundPrice(C.CARD_BASE_PRICES[id] * cardMarketFactor(card.set, id, day, tick, card.rarity));
 }
 function normalizeCards() {
   const raw = S.cards && typeof S.cards === 'object' ? S.cards : {};
@@ -221,9 +231,8 @@ function normalizeCards() {
   S.cards.enabled ||= cardKeys().some(k => cardCount(S.cards.packs[k])) || CARD_CATALOG.some(c => cardCount(S.cards.owned[c.id]));
   const pending = raw.opening;
   if (pending && Number.isSafeInteger(pending.id) && pending.id > 0 && cardPackInfo(pending.key)
-    && Array.isArray(pending.ids) && pending.ids.length === C.CARD_PACK_SIZE
-    && pending.ids.every(id => cardById(id)?.set === cardPackInfo(pending.key).set.id)
-    && pending.ids.slice(0, -1).every(id => cardById(id).rarity === 'basic')) {
+    && Array.isArray(pending.ids) && [C.CARD_PACK_SIZE, C.CARD_LEGACY_PACK_SIZE].includes(pending.ids.length)
+    && pending.ids.every(id => cardById(id)?.set === cardPackInfo(pending.key).set.id)) {
     S.cards.opening = { id: pending.id, key: pending.key, ids: pending.ids.slice() };
     S.cards.nextOpen = Math.max(S.cards.nextOpen, pending.id + 1);
   }
@@ -243,9 +252,10 @@ function normalizeCards() {
 }
 function cardRarity(packId, roll) {
   if (!C.CARD_PACK_PRICES[packId] || !Number.isFinite(roll) || roll < 0 || roll >= 1) return null;
-  let percent = roll * 100;
-  if (percent < C.CARD_MYTHIC_PERCENT) return 'mythic';
-  percent -= C.CARD_MYTHIC_PERCENT;
+  const mythic = 1 - Math.pow(1 - C.CARD_MYTHIC_PERCENT / 100, 1 / C.CARD_PACK_SIZE);
+  if (roll < mythic) return 'mythic';
+  const weights = C.CARD_PACK_PRICES[packId].rates;
+  let percent = (roll - mythic) / (1 - mythic) * weights.reduce((n, v) => n + v, 0);
   for (let i = 0; i < C.CARD_PACK_PRICES[packId].rates.length; i++) {
     percent -= C.CARD_PACK_PRICES[packId].rates[i];
     if (percent < 0) return CARD_RARITIES[i].id;
@@ -255,10 +265,9 @@ function cardRarity(packId, roll) {
 function drawCardPack(key, random = Math.random) {
   const info = cardPackInfo(key);
   if (!info) return [];
-  const rarity = cardRarity(info.pack.id, random());
-  if (!rarity) return [];
-  return Array.from({ length: C.CARD_PACK_SIZE }, (_, i) => {
-    const pool = CARD_CATALOG.filter(c => c.set === info.set.id && c.rarity === (i === C.CARD_PACK_SIZE - 1 ? rarity : 'basic'));
+  return Array.from({ length: C.CARD_PACK_SIZE }, () => {
+    const rarity = cardRarity(info.pack.id, random());
+    const pool = CARD_CATALOG.filter(c => c.set === info.set.id && c.rarity === rarity);
     return pool[Math.floor(random() * pool.length)].id;
   });
 }
@@ -278,10 +287,11 @@ function syncCardLedger() {
   R.led.cardPackSales = daily.packSales; R.led.cardSales = daily.cardSales;
   R.led.cardSpent = daily.spent; R.led.cardOpened = daily.opened;
 }
-function buyCardPacks(key, qty) {
+function buyCardPacks(key, qty, quote = null) {
   normalizeCards();
   const info = cardPackInfo(key), total = cardKeys().reduce((n, k) => n + cardCount(S.cards.packs[k]), 0);
   if (hostPlaying() || !info || !Number.isSafeInteger(qty) || qty < 1 || total + qty > C.CARD_STOCK_MAX || S.money < info.buy * qty) return false;
+  if (quote && (quote.tick !== cardMarketTick() || quote.buy !== info.buy)) return false;
   return cardTransaction(() => {
     S.money -= info.buy * qty; S.cards.enabled = true;
     S.cards.packs[key].push({ qty, cost: info.buy });
@@ -293,10 +303,10 @@ function takeCardLot(lots) {
   if (--lots[0].qty === 0) lots.shift();
   return cost;
 }
-function openCardPack(key) {
+function openCardPack(key, previousId = null) {
   normalizeCards();
   if (hostPlaying()) return false;
-  if (S.cards.opening) return S.cards.opening;
+  if (S.cards.opening && S.cards.opening.id !== previousId) return S.cards.opening;
   if (!cardPackInfo(key) || !cardCount(S.cards.packs[key])) return false;
   let result;
   const ok = cardTransaction(() => {
@@ -315,20 +325,24 @@ function finishCardOpening(id) {
 }
 function cardShopView() {
   normalizeCards();
+  const tick = cardMarketTick();
   return { money: S.money, canManage: !hostPlaying() && !CloudSave.state().blocked && !CloudSave.state().busy,
+    tick, nextIn: Math.ceil((C.CARD_MARKET_INTERVAL_MS - Date.now() % C.CARD_MARKET_INTERVAL_MS) / 1000),
+    packPrices: Object.fromEntries(cardKeys().map(k => { const info = cardPackInfo(k, S.day, tick); return [k, { buy: info.buy, sell: info.sell }]; })),
     playing: hostPlaying(), stock: Object.fromEntries(cardKeys().map(k => [k, cardCount(S.cards.packs[k])])),
     owned: Object.fromEntries(CARD_CATALOG.map(c => [c.id, cardCount(S.cards.owned[c.id])])),
     costs: Object.fromEntries(CARD_CATALOG.map(c => [c.id, S.cards.owned[c.id][0]?.cost || 0])),
-    prices: Object.fromEntries(CARD_CATALOG.map(c => [c.id, cardPrice(c.id)])),
-    previous: Object.fromEntries(CARD_CATALOG.map(c => [c.id, cardPrice(c.id, Math.max(1, S.day - 1))])),
+    prices: Object.fromEntries(CARD_CATALOG.map(c => [c.id, cardPrice(c.id, S.day, tick)])),
+    previous: Object.fromEntries(CARD_CATALOG.map(c => [c.id, cardPrice(c.id, S.day, tick - 1)])),
     opening: S.cards.opening, offers: S.cards.daily.offers.filter(o => o.status === 'waiting' && R?.queue.some(c => c.cardBuyer === o.id)) };
 }
 function cardMarketHTML() {
-  const T = CARD_SHOP_COPY, news = cardNews();
+  const T = CARD_SHOP_COPY, news = cardNews(), tick = cardMarketTick();
   const featured = CARD_CATALOG.filter(c => (!news.set || news.set === c.set) && (!news.rarities || news.rarities.includes(c.rarity)))
     .filter(c => c.rarity !== 'basic').slice(-C.CARD_PACK_SIZE);
   return `<h3>🎴 ${esc(news.title)}</h3><p>${esc(news.text)}</p><p class="hint">${T.marketHint} ${T.future}</p>`
-    + featured.map(c => `<p><b>${esc(c.name)}</b> · ${T.base}: ${money(C.CARD_BASE_PRICES[c.id])} · ${T.market}: <b>${money(cardPrice(c.id))}</b> · ${T.previous}: ${money(cardPrice(c.id, Math.max(1, S.day - 1)))}</p>`).join('');
+    + CARD_SETS.map(s => `<p><b>${esc(s.name)}</b> · ${CARD_PACKS.map(p => { const info = cardPackInfo(s.id + ':' + p.id, S.day, tick); return esc(p.name) + ': ' + money(info.buy) + ' / ' + money(info.sell); }).join(' · ')} (${T.importPrice} / ${T.retail})</p>`).join('')
+    + featured.map(c => `<p><b>${esc(c.name)}</b> · ${T.base}: ${money(C.CARD_BASE_PRICES[c.id])} · ${T.market}: <b>${money(cardPrice(c.id, S.day, tick))}</b> · ${T.previous}: ${money(cardPrice(c.id, S.day, tick - 1))}</p>`).join('');
 }
 function cardOfferItem(o) {
   if (!o) return '';
@@ -414,13 +428,19 @@ function openCardBuyer(c) {
   const m = openModal({ title: '🎴 ' + T.buyTitle,
     body: `<div class="talk">${faceSVG(c)}<div class="speech"><small>${esc(c.name)}</small>${esc(c.line)}</div></div>`
       + (card ? `<div class="tcg-buyer-card">${window.CardAlbum.faceHTML(card)}</div>` : `<h3>${esc(cardOfferItem(o))}</h3>`)
-      + `<div class="tcg-quote"><p>${T.offer}: <b>${money(o.price, true)}</b></p><p>${T.comparison}: ${Math.round((o.price / reference - 1) * 100)}% · ${T.market}: ${money(reference)}</p>`
+      + `<div class="tcg-quote"><p>${T.offer}: <b>${money(o.price, true)}</b></p><p>${T.comparison}: <span data-buyer-comparison>${Math.round((o.price / reference - 1) * 100)}%</span> · ${T.market}: <span data-buyer-market>${money(reference)}</span></p>`
       + `<p>${T.stock}: ${count} ${card ? T.copies : T.packs} · ${T.cost}: ${money(cost)}</p>${!count ? `<p class="bad">${T.missing}</p>` : ''}</div>`,
     actions: [{ label: T.decline, cls: 'ghost', onClick: () => { if (declineCardBuyer(c)) closeModal(); } },
       { label: T.sell, cls: 'primary', onClick: () => { if (sellToCardBuyer(c)) closeModal(); } }],
     onClose: () => { c.atCounter = false; if (hostPlaying() && !paused) setPause(false); } });
   m.card.classList.add('tcg-buyer-modal');
   m.card.querySelector('.modal-actions .primary').disabled = !count || CloudSave.state().blocked || CloudSave.state().busy;
+  const timer = setInterval(() => {
+    const price = card ? cardPrice(card.id) : cardPackInfo(o.key).sell;
+    m.card.querySelector('[data-buyer-market]').textContent = money(price);
+    m.card.querySelector('[data-buyer-comparison]').textContent = Math.round((o.price / price - 1) * 100) + '%';
+  }, C.CARD_MARKET_UI_MS);
+  m.cardDemoCleanup = () => clearInterval(timer);
 }
 
 // ---------- Máy tính chủ: dữ liệu và giao dịch buổi sáng ----------
@@ -784,11 +804,18 @@ function renderHostApp(app = 'desktop', keepScroll = false) {
     };
     modal.cardDemoCleanup = window.CardAlbum.mount(modal.bodyEl.querySelector('[data-card-album]'), {
       read: cardShopView, money,
-      buy: (key, qty) => { const ok = buyCardPacks(key, qty); if (ok) refresh(); return ok; },
-      open: key => { const result = openCardPack(key); if (result) refresh(); return result; },
+      buy: (key, qty, quote) => { const ok = buyCardPacks(key, qty, quote); if (ok) refresh(); return ok; },
+      open: (key, previousId) => { const result = openCardPack(key, previousId); if (result) refresh(); return result; },
       finish: finishCardOpening,
       meet: id => { const c = R?.queue.find(c => c.cardBuyer === id); if (c) openCardBuyer(c); },
     });
+  }
+  if (app === 'news') {
+    let tick = cardMarketTick();
+    const timer = setInterval(() => {
+      if (modal?.hostApp === 'news' && cardMarketTick() !== tick) { tick = cardMarketTick(); renderHostApp('news', true); }
+    }, C.CARD_MARKET_UI_MS);
+    modal.cardDemoCleanup = () => clearInterval(timer);
   }
   modal.bodyEl.scrollTop = scrollTop;
 }

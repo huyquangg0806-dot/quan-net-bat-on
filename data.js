@@ -18,11 +18,14 @@ const CARD_COPY = {
   note: 'Gói mẫu miễn phí để xem tranh và hiệu ứng. Thẻ trong gói chưa được ghi vào bản lưu.',
   search: 'Tìm tên hoặc mã thẻ', searchHint: 'Mầm Sương, Mẹ Gank, HB-038…',
   pack: 'Gói mẫu', sample: 'Mở gói mẫu', sampleHint: 'Kéo mép bao sang phải để xé, hoặc bấm nút.',
-  tear: 'Xé gói', tearing: 'Đang xé mép bao…', reveal: 'Lật thẻ tiếp theo',
+  tear: 'Xé gói', tearing: 'Đang xé mép bao…', reveal: 'Lật thẻ tiếp theo', revealAll: 'Lật tất cả', quick: 'Mở nhanh',
   ready: 'Thẻ đã ra khỏi gói. Bấm một lá để lật.', revealing: 'Đang lật thẻ…',
   again: 'Thử gói khác', album: 'Về album', done: 'Đã mở hết gói mẫu!',
   progress: 'Đã lật', view: 'Xem thẻ', back: '← Về album', empty: 'Không tìm thấy thẻ phù hợp.',
-  help: 'Máy chủ có Album thẻ: nhập gói sáng để tự mở hoặc bán cho khách. Gói đắt hơn tăng cơ hội Rare/Epic/Legend; Mythic 1% mỗi gói. Bảng tin có giá thị trường, khách ở cửa trả giá mua gói/thẻ; bạn chọn bán hoặc giữ. Gói mẫu chỉ xem hiệu ứng, không thêm thẻ thật.',
+  ownedOnly: 'Thẻ đang có', catalog: 'Danh mục bộ', noOwned: 'Bạn chưa có thẻ trong bộ này. Nhập pack rồi tự mở để thêm vào album nhé!',
+  stockLink: 'Về kho gói', collectionProgress: (unique, total, copies) => `Đã sưu tầm ${unique}/${total} lá · ${copies} bản`,
+  flippingCard: n => `Đang lật lá ${n}…`,
+  help: 'Album mặc định hiện thẻ đang có và số bản trùng; Danh mục bộ cho xem các lá còn thiếu. Mỗi pack 5 lá ngẫu nhiên, Mythic 1% mỗi pack. Khi lật ra, mỗi lá hiện giá gốc; Mở nhanh bỏ qua hiệu ứng. Giá thị trường đổi mỗi 30 giây, giá khách đã đưa giữ nguyên. Gói mẫu chỉ xem tranh, không thêm thẻ thật.',
   count: '40 lá · 15 Basic · 10 Rare · 7 Epic · 5 Legend · 3 Mythic',
 };
 const CARD_CATALOG = [
@@ -109,6 +112,9 @@ const CARD_CATALOG = [
   { id: 'QN-040', set: 'noi-bo', rarity: 'mythic', name: 'Quán Sáng Đèn', art: 40 },
 ];
 
+const CARD_ILLUSTRATIONS = Object.fromEntries(['001', '016', '029', '035', '038'].map(id => ['HB-' + id, 'assets/cards/hb-' + id + '-painted-v1.jpg']));
+const CARD_PAINTED_SAMPLE = ['HB-001', 'HB-016', 'HB-029', 'HB-035', 'HB-038'];
+
 const CARD_PACKS = [
   { id: 'thuong', name: 'Khởi đầu', desc: 'Dễ nhập, vừa túi tiền khách.' },
   { id: 'san-hiem', name: 'Săn hiếm', desc: 'Thêm cơ hội Rare và Epic.' },
@@ -132,9 +138,12 @@ const CARD_SHOP_COPY = {
   morning: 'Trong ca chỉ xem kho và phục vụ khách mua thẻ ở cửa. Nhập gói và tự mở vào buổi sáng.',
   inventory: 'Kho gói', owned: 'Bộ sưu tập', packs: 'gói', copies: 'bản', buy: 'Nhập', open: 'Tự mở',
   stock: 'Trong kho', importPrice: 'Giá nhập', retail: 'Giá bán cho khách', base: 'Giá gốc',
-  market: 'Giá thị trường hôm nay', previous: 'Hôm qua', cost: 'Giá vốn bản bán trước', odds: 'Tỷ lệ lá ngẫu nhiên',
-  packRule: 'Mỗi gói: 2 Basic + 1 lá ngẫu nhiên. Mythic 1% mỗi gói, mọi loại gói đều giữ tỷ lệ này.',
-  marketHint: 'Giá tham khảo đổi theo ngày, xem lý do trên Bảng tin. Gói đắt hơn tăng cơ hội Rare/Epic/Legend.',
+  market: 'Giá thị trường', previous: 'Nhịp trước', cost: 'Giá vốn bản bán trước', odds: 'Tỷ lệ mỗi lá',
+  packRule: '5 lá đều ngẫu nhiên, không có lá Basic cố định. Mỗi pack có 1% cơ hội chứa Mythic, ở mọi loại gói.',
+  marketHint: 'Giá pack và thẻ cập nhật mỗi 30 giây. Gói đắt hơn tăng cơ hội Rare/Epic/Legend; giá khách đã đưa không đổi.',
+  priceChanged: 'Giá pack vừa đổi. Xem giá mới rồi bấm nhập lại nhé.',
+  next: 'Xé gói tiếp', quickNext: 'Mở nhanh tiếp',
+  updateIn: n => `Giá đổi sau ${n} giây`, perPack: 'Mythic trong pack: 1%',
   retained: 'Kết quả đã lưu cùng kho thẻ. Đóng hoặc tải lại vẫn giữ đúng những lá này.',
   pending: 'Tiếp tục gói đang mở', actualPack: 'Gói của quán', actualDone: 'Đã mở hết gói — thẻ đã có trong bộ sưu tập!',
   actualAgain: 'Về kho gói', ownedCount: 'Đã có', meet: 'Gặp khách', waiting: 'Khách đang tìm mua',
@@ -173,18 +182,21 @@ const HOST_TRENDS = [
 ];
 
 const CONFIG = {
-  CARD_PACK_SIZE: 3, CARD_MYTHIC_PERCENT: 1, // 2 Basic + 1 lá ngẫu nhiên, Mythic 1% mỗi gói
+  CARD_PACK_SIZE: 5, CARD_LEGACY_PACK_SIZE: 3, CARD_MYTHIC_PERCENT: 1, // năm lá độc lập; cơ hội pack có Mythic vẫn 1%
   CARD_PACK_PRICES: {
-    thuong: { buy: 8000, sell: 11000, rates: [74, 20, 4, 1] },
-    'san-hiem': { buy: 14000, sell: 20000, rates: [49, 35, 12, 3] },
-    'tuyen-chon': { buy: 22000, sell: 31000, rates: [29, 40, 22, 8] },
-  }, // rates: Basic/Rare/Epic/Legend, cộng Mythic = 100%
+    thuong: { buy: 20000, sell: 28000, rates: [74, 20, 4, 1] },
+    'san-hiem': { buy: 32000, sell: 45000, rates: [49, 35, 12, 3] },
+    'tuyen-chon': { buy: 50000, sell: 70000, rates: [29, 40, 22, 8] },
+  }, // rates: trọng số Basic/Rare/Epic/Legend sau khi loại nhánh Mythic
   CARD_STOCK_MAX: 50, CARD_BUY_BATCH: 5, // gói trong kho, số gói nút nhập nhanh
   CARD_COUNT_MAX: 1000000, // giới hạn số bản trong file lưu
   CARD_DAILY_BUYERS: 6, CARD_BUYER_START_SECONDS: 6, CARD_BUYER_INTERVAL: 28, // khách/ngày, giây thật
   CARD_BUYER_PATIENCE: 60, // giây thật chờ chủ quán
   CARD_OFFER_MIN: .8, CARD_OFFER_MAX: 1.25, // giá khách trả/giá thị trường
   CARD_MARKET_VARIANCE: .18, CARD_MARKET_MIN: .6, CARD_MARKET_MAX: 1.7, // hệ số giá so với base
+  CARD_MARKET_INTERVAL_MS: 30000, CARD_MARKET_UI_MS: 1000, // nhịp giá/thời gian cập nhật đồng hồ giao diện
+  CARD_MARKET_SLOW_TICKS: 6, CARD_MARKET_FAST_TICKS: 2, CARD_MARKET_SLOW_WEIGHT: .7, // nhịp sóng và tỷ trọng sóng chậm
+  CARD_PACK_PRICE_STEP: 500, // làm tròn giá pack theo đồng
   CARD_PRICE_STEP: 50, // làm tròn theo đồng
   CARD_BASE_PRICES: {
     'HB-001': 500,
@@ -268,10 +280,10 @@ const CONFIG = {
     'QN-039': 220000,
     'QN-040': 280000,
   }, // đồng/lá, không đổi theo ngày
-  CARD_DEMO_PACK_SIZE: 3,       // số lá trong một gói mẫu, không phải tỷ lệ gacha thật
-  CARD_TEAR_MS: 620,           // mili giây: xé mép bao rồi thẻ trượt ra
-  CARD_FLIP_MS: 520,           // mili giây: lật một lá
-  CARD_DRAG_RATIO: .6,         // xé khi kéo qua 60% chiều rộng mép bao
+  CARD_DEMO_PACK_SIZE: 5,       // số lá mẫu để duyệt đủ năm mức hiếm
+  CARD_TEAR_MS: 260,           // mili giây: bao tách và năm lá trải ra
+  CARD_FLIP_MS: 640, CARD_REVEAL_STAGGER_MS: 120, // mili giây: nâng/chờ/lật, lệch nhịp khi lật tất cả
+  CARD_DRAG_RATIO: .3,         // xé khi kéo qua 30% chiều rộng mép bao
   GAME_HOUR_MS: 15000,     // 1 giờ trong game = 15 giây thật
   OPEN_HOUR: 8,
   MAX_OPEN_UNTIL: 32,      // mở muộn nhất tới 8h sáng hôm sau (giờ game chạy liên tục: 24 = 0h, 32 = 8h)
