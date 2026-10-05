@@ -19,18 +19,20 @@ const rg = (id, color, a = .85) =>
 
 function defsSVG() {
   return `<defs>
-    <pattern id="pFloor" width="72" height="72" patternUnits="userSpaceOnUse" patternTransform="translate(0 ${FLOOR_TOP}) scale(1 .58)">
-      <rect width="72" height="72" fill="#EFE3C8"/>
-      <circle r="17" fill="#D6E4D4"/><circle cx="72" r="17" fill="#D6E4D4"/><circle cy="72" r="17" fill="#D6E4D4"/><circle cx="72" cy="72" r="17" fill="#D6E4D4"/>
-      <g transform="translate(36 36)" fill="#EFCDB3"><ellipse rx="5" ry="13"/><ellipse rx="13" ry="5"/></g>
-      <circle cx="36" cy="36" r="3.5" fill="#E2AE90"/>
-      <path d="M0,0 H72 V72" fill="none" stroke="#E2D2AE" stroke-width="2"/>
+    <pattern id="pFloor" width="92" height="92" patternUnits="userSpaceOnUse" patternTransform="translate(0 ${FLOOR_TOP}) scale(1 .58)">
+      <rect width="92" height="92" fill="#F3E9D2"/>
+      <g fill="#C8DCD0" opacity=".6"><circle r="20"/><circle cx="92" r="20"/><circle cy="92" r="20"/><circle cx="92" cy="92" r="20"/></g>
+      <g transform="translate(46 46)" fill="#DFBC9D" opacity=".45"><ellipse rx="5" ry="14"/><ellipse rx="14" ry="5"/></g>
+      <circle cx="46" cy="46" r="3" fill="#D5B18E" opacity=".5"/>
+      <path d="M0,0 H92 V92" fill="none" stroke="#DDD0B6" stroke-width="1.5"/>
     </pattern>
     <pattern id="pWains" width="44" height="26" patternUnits="userSpaceOnUse" patternTransform="translate(44 352)">
-      <rect width="44" height="26" fill="#6EB3A1"/><rect x="1.5" y="1.5" width="41" height="23" rx="2" fill="#7CC0AE"/>
+      <rect width="44" height="26" fill="#71A899"/><rect x="1.5" y="1.5" width="41" height="23" rx="2" fill="#91C4B3"/>
+      <path d="M4,4 H39" stroke="#BFE0D0" stroke-width="1" opacity=".6"/>
     </pattern>
-    <pattern id="pAwning" width="64" height="80" patternUnits="userSpaceOnUse">
-      <rect width="32" height="80" fill="#1FA89A"/><rect x="32" width="32" height="80" fill="#FFF3DA"/>
+    <pattern id="pAwning" width="60" height="80" patternUnits="userSpaceOnUse">
+      <rect width="30" height="80" fill="#238D80"/><rect x="30" width="30" height="80" fill="#FFF3DA"/>
+      <path d="M2,22 V46 M32,22 V46" stroke="#FFFFFF" stroke-width="2" opacity=".16"/>
     </pattern>
     <pattern id="pWalk" width="60" height="30" patternUnits="userSpaceOnUse" patternTransform="translate(0 ${FRONT + 6})">
       <rect width="60" height="30" fill="#A3A9AB"/><path d="M0,0 H60 M0,0 V30" stroke="#8E9496" stroke-width="2"/>
@@ -39,7 +41,34 @@ function defsSVG() {
       <rect width="6" height="6" fill="#5E6672"/><path d="M0,0 V6" stroke="#7A838F" stroke-width="2"/>
     </pattern>
     <linearGradient id="gCeil" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#5A3B22" stop-opacity=".38"/><stop offset="1" stop-color="#5A3B22" stop-opacity="0"/>
+      <stop offset="0" stop-color="#8E6847" stop-opacity=".2"/><stop offset="1" stop-color="#8E6847" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="gWall" x2="0" y2="1">
+      <stop stop-color="#FFF4DC"/><stop offset="1" stop-color="#EEDAB4"/>
+    </linearGradient>
+    <linearGradient id="gWood" x2="0" y2="1">
+      <stop stop-color="#D6A676"/><stop offset="1" stop-color="#A77550"/>
+    </linearGradient>
+    <linearGradient id="gMetal" x2="1" y2="0">
+      <stop stop-color="#929CA0"/><stop offset=".4" stop-color="#DCE1DC"/><stop offset="1" stop-color="#A2AEAE"/>
+    </linearGradient>
+    <linearGradient id="gOak" x2="0" y2="1">
+      <stop stop-color="#EDC99A"/><stop offset=".5" stop-color="#D6A875"/><stop offset="1" stop-color="#B77D50"/>
+    </linearGradient>
+    <linearGradient id="gPlastic" x2="1" y2="1">
+      <stop stop-color="#F3EAD6"/><stop offset=".5" stop-color="#DAD0B6"/><stop offset="1" stop-color="#AEA48C"/>
+    </linearGradient>
+    <linearGradient id="gLeather" x2="1" y2="1">
+      <stop stop-color="#545B60"/><stop offset=".45" stop-color="#30373C"/><stop offset="1" stop-color="#1C2529"/>
+    </linearGradient>
+    <linearGradient id="gBlueSeat" x2="1" y2="1">
+      <stop stop-color="#78AFC5"/><stop offset=".5" stop-color="#528FA8"/><stop offset="1" stop-color="#35687F"/>
+    </linearGradient>
+    <linearGradient id="gCeramic" x2="0" y2="1">
+      <stop stop-color="#FFFDF1"/><stop offset="1" stop-color="#D7C9A9"/>
+    </linearGradient>
+    <linearGradient id="gGlass" x2="1" y2="1">
+      <stop stop-color="#4C6470"/><stop offset=".45" stop-color="#263B43"/><stop offset="1" stop-color="#162B32"/>
     </linearGradient>
     <linearGradient id="gFloorShade" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#6B4A2F" stop-opacity=".16"/><stop offset=".5" stop-color="#6B4A2F" stop-opacity="0"/>
@@ -67,18 +96,20 @@ function defsSVG() {
     </filter>
     <filter id="fBlur"><feGaussianBlur stdDeviation="10"/></filter>
     <radialGradient id="gVig" cx=".5" cy=".55" r=".75">
-      <stop offset=".45" stop-color="#0E0F26" stop-opacity="0"/><stop offset="1" stop-color="#0E0F26"/>
+      <stop offset=".4" stop-color="#152E3A" stop-opacity="0"/><stop offset="1" stop-color="#152E3A"/>
     </radialGradient>
   </defs>`;
 }
 
-// ---------- Biển hiệu (vẽ sau lớp tối để đèn neon luôn sáng) ----------
+// ---------- Biển hiệu (vẽ sau lớp tối để chữ luôn sáng) ----------
 function signSVG() {
   return `<g transform="translate(800 0)">
     <line x1="-250" y1="0" x2="-250" y2="14" stroke="#333" stroke-width="3"/><line x1="250" y1="0" x2="250" y2="14" stroke="#333" stroke-width="3"/>
-    <rect x="-300" y="10" width="600" height="92" rx="12" fill="#10302C" stroke="#0A1F1C" stroke-width="5"/>
-    <rect x="-288" y="20" width="576" height="72" rx="8" fill="none" stroke="#5FF2DC" stroke-width="2.5" filter="url(#fNeon)"/>
-    <text id="signText" class="baloo" y="72" text-anchor="middle" font-size="52" fill="#DFFFF8" filter="url(#fNeon)" letter-spacing="1"></text>
+    <rect x="-300" y="15" width="600" height="92" rx="12" fill="#5B3F2E" opacity=".22"/>
+    <rect x="-300" y="10" width="600" height="92" rx="12" fill="url(#gWood)" stroke="#654936" stroke-width="4"/>
+    <rect x="-288" y="20" width="576" height="72" rx="8" fill="#244A40" stroke="#F0D7A4" stroke-width="2"/>
+    <path d="M-276,27 H276" stroke="#FFFFFF" stroke-width="1.5" opacity=".22"/>
+    <text id="signText" class="baloo" y="72" text-anchor="middle" font-size="52" fill="#FFF1CA" letter-spacing="1"></text>
     <g transform="translate(-258 56)" fill="#FFD04A">
       <rect x="-15" y="-9" width="30" height="18" rx="9"/><circle cx="-7" cy="0" r="2.5" fill="#10302C"/><circle cx="8" cy="-3" r="2" fill="#10302C"/><circle cx="8" cy="3" r="2" fill="#10302C"/>
     </g>
@@ -89,14 +120,20 @@ function signSVG() {
 }
 
 // ---------- Đồ vật trong phòng ----------
-function counterSVG() {
-  const planks = Array.from({ length: 9 }, (_, k) => `<line x1="${1126 + k * 34}" y1="414" x2="${1126 + k * 34}" y2="524" stroke="#94603A" stroke-width="2"/>`).join('');
+function counterSVG(interactive = true) {
+  const planks = Array.from({ length: 7 }, (_, k) => `<path d="M${1136 + k * 44},417 V521" stroke="#8E6246" stroke-width="1.5" opacity=".5"/>
+    <path d="M${1140 + k * 44},426 Q${1144 + k * 44},458 ${1140 + k * 44},486" stroke="#F2C996" stroke-width="1.4" opacity=".5" fill="none"/>
+    <circle cx="${1115 + k * 44}" cy="420" r="1.8" fill="#8B694B"/>`).join('');
   return `
-  <ellipse cx="1262" cy="532" rx="190" ry="10" fill="#3A2A22" opacity=".12"/>
-  <path d="M1096,378 L1428,378 L1436,406 L1088,406 Z" fill="#C8905E"/>
+  <ellipse cx="1262" cy="533" rx="190" ry="12" fill="#3A2A22" opacity=".12"/>
+  <path d="M1096,378 L1428,378 L1436,406 L1088,406 Z" fill="url(#gOak)" stroke="#72513B" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M1114,397 Q1210,391 1270,397 T1420,396" stroke="#B58352" stroke-width="1.3" opacity=".6" fill="none"/>
+  <path d="M1106,387 H1422" stroke="#FFF0D5" stroke-width="2" opacity=".7"/>
   <rect x="1088" y="404" width="348" height="9" fill="#8A5A3B"/>
-  <rect x="1092" y="413" width="340" height="114" fill="#A86F45"/>${planks}
+  <rect x="1092" y="413" width="340" height="114" fill="url(#gWood)" stroke="#72513B" stroke-width="2"/>${planks}
   <rect x="1092" y="522" width="340" height="9" fill="#6D4428"/>
+  <path d="M1096,414 H1428 M1096,520 H1428" stroke="#F5CC98" stroke-width="2" opacity=".5"/>
+  <rect x="1104" y="531" width="16" height="6" rx="2" fill="#66513D"/><rect x="1404" y="531" width="16" height="6" rx="2" fill="#66513D"/>
   <g transform="translate(1180 466) rotate(-3)">
     <rect x="-50" y="-28" width="100" height="56" fill="#FFFDF4"/>
     <rect x="-12" y="-34" width="24" height="10" fill="#F6E3A0" opacity=".9"/>
@@ -108,11 +145,13 @@ function counterSVG() {
     <text class="baloo" y="6" text-anchor="middle" font-size="15" fill="#FFF3DA">NET</text>
   </g>
   <!-- Máy chủ + hộp tiền -->
-  <g data-hit="host" role="button" tabindex="0" aria-label="Mở máy tính chủ" class="host-monitor">
+  <g ${interactive ? 'data-hit="host" role="button" tabindex="0" aria-label="Mở máy tính chủ" class="host-monitor"' : ''}>
     <title>Máy tính chủ · bấm để mở các app</title>
     <rect x="1095" y="324" width="78" height="58" fill="transparent"/>
-    <rect x="1104" y="334" width="56" height="40" rx="3" fill="#2D2F36"/>
-    <rect x="1109" y="339" width="46" height="29" rx="2" fill="#1FA89A"/>
+    <rect x="1106" y="337" width="56" height="40" rx="4" fill="#25383D"/>
+    <rect x="1104" y="334" width="56" height="40" rx="3" fill="#46585D" stroke="#21383C" stroke-width="1.4"/>
+    <rect x="1109" y="339" width="46" height="29" rx="2" fill="#1F857B"/>
+    <path d="M1110,340 H1133 L1110,358 Z" fill="#B9E7CD" opacity=".18"/>
     <text x="1132" y="358" text-anchor="middle" font-size="11" fill="#FFFDF4">APP</text>
     <rect x="1127" y="374" width="10" height="6" fill="#2D2F36"/>
   </g>
@@ -131,9 +170,11 @@ function counterSVG() {
   <g id="flame" transform="translate(1379 366)">
     <path d="M-16,0 q4,-12 8,0 z M-4,0 q4,-14 8,0 z M8,0 q4,-12 8,0 z" fill="#4AA8FF"/>
   </g>
-  <rect x="1350" y="326" width="58" height="40" rx="7" fill="#B9C0C4"/>
+  <rect x="1350" y="326" width="58" height="40" rx="7" fill="url(#gMetal)" stroke="#687676" stroke-width="2"/>
+  <path d="M1353,354 Q1379,362 1405,354 V361 Q1379,370 1353,361 Z" fill="#879F9F" opacity=".5"/>
   <rect x="1340" y="334" width="12" height="6" rx="3" fill="#8E969A"/><rect x="1406" y="334" width="12" height="6" rx="3" fill="#8E969A"/>
-  <ellipse cx="1379" cy="326" rx="31" ry="6" fill="#D5DBDE"/><circle cx="1379" cy="318" r="4" fill="#3A3A3A"/>
+  <ellipse cx="1379" cy="327" rx="31" ry="6" fill="#869B9C"/><ellipse cx="1379" cy="324" rx="31" ry="6" fill="#DDE4DE" stroke="#718889" stroke-width="1.2"/>
+  <ellipse cx="1379" cy="322" rx="21" ry="3" fill="#F2F5E8"/><rect x="1373" y="314" width="12" height="7" rx="3" fill="#3A5156"/>
   <path d="M1356,346 H1402" stroke="#fff" stroke-width="3" opacity=".4"/>
   <g id="potSteam" class="steam" transform="translate(1379 312)" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" opacity=".85">
     <path d="M-10,0 q-8,-10 0,-20 q8,-10 0,-20"/><path d="M4,0 q-8,-10 0,-20 q8,-10 0,-20"/><path d="M16,0 q-8,-10 0,-20 q8,-10 0,-20"/>
@@ -152,20 +193,26 @@ function dispenserSVG() {
 }
 
 function plantSVG(scale = 1) {
-  const leaf = (r, len, c) => `<ellipse cx="0" cy="${-len / 2}" rx="${len * .22}" ry="${len / 2}" fill="${c}" transform="rotate(${r})"/>`;
+  const leaf = (r, len, c) => `<g transform="rotate(${r})"><path d="M0,0 Q${-len * .4},${-len * .55} 0,${-len} Q${len * .4},${-len * .55} 0,0 Z" fill="${c}" stroke="${shade(c, .66)}" stroke-width="1.3"/>
+    <path d="M0,-6 Q-5,${-len * .5} 0,${-len + 9}" stroke="${shade(c, 1.4)}" stroke-width="1.2" fill="none"/></g>`;
   return `<g transform="scale(${scale})">
     <ellipse rx="30" ry="6" fill="#3A2A22" opacity=".14"/>
     <g transform="translate(0 -44)">
       ${leaf(-50, 80, '#4F9A5A')}${leaf(-20, 96, '#5FAE68')}${leaf(10, 104, '#4F9A5A')}${leaf(38, 88, '#6BBF72')}${leaf(62, 70, '#4F9A5A')}${leaf(-72, 60, '#6BBF72')}
     </g>
-    <path d="M-26,-46 L26,-46 L20,0 L-20,0 Z" fill="#C7683F"/><rect x="-29" y="-52" width="58" height="10" rx="3" fill="#D97B4F"/>
+    <path d="M-26,-46 L26,-46 L20,0 Q0,7 -20,0 Z" fill="#C98659" stroke="#8D583B" stroke-width="1.7"/>
+    <path d="M12,-44 H24 L19,0 Q7,4 0,3 Z" fill="#A46343"/>
+    <path d="M-18,-37 L-15,-8" stroke="#F0B98B" stroke-width="3" stroke-linecap="round"/>
+    <rect x="-29" y="-52" width="58" height="10" rx="3" fill="#DDA577" stroke="#8D583B" stroke-width="1.5"/><path d="M-25,-49 H24" stroke="#F5D3A3" stroke-width="1.5"/>
   </g>`;
 }
 
 function stoolSVG(color) {
   return `<ellipse rx="30" ry="6" fill="#3A2A22" opacity=".14"/>
-    <path d="M-24,-34 L24,-34 L29,0 L20,0 L16,-12 L-16,-12 L-20,0 L-29,0 Z" fill="${color}"/>
-    <ellipse cy="-34" rx="26" ry="6.5" fill="${shade(color, 1.15)}"/>
+    <path d="M-24,-34 L24,-34 L29,0 L20,0 L16,-12 L-16,-12 L-20,0 L-29,0 Z" fill="${color}" stroke="${shade(color, .63)}" stroke-width="1.6"/>
+    <path d="M18,-31 L24,-3 M-22,-27 L-25,-5" stroke="${shade(color, 1.4)}" stroke-width="2" opacity=".65"/>
+    <ellipse cy="-34" rx="26" ry="6.5" fill="${shade(color, 1.15)}" stroke="${shade(color, .63)}" stroke-width="1.4"/>
+    <path d="M-19,-36 Q0,-41 19,-36" stroke="${shade(color, 1.5)}" stroke-width="1.5" fill="none"/>
     <path d="M-6,-26 q6,-7 12,0 q-6,8 -12,0z" fill="${shade(color, .7)}"/>`;
 }
 
@@ -175,7 +222,8 @@ function dogSVG(awake) {
   return `<ellipse rx="52" ry="8" fill="#3A2A22" opacity=".16"/>
     <g class="${awake ? 'wag' : ''}"><path d="M-40,-10 q-22,-4 -16,-24 q3,10 14,12" fill="#D39148"/></g>
     <g class="breath">
-      <ellipse cx="-6" cy="-17" rx="40" ry="18" fill="#E3A45A"/>
+      <ellipse cx="-6" cy="-17" rx="40" ry="18" fill="#E3A45A" stroke="#976236" stroke-width="1.5"/>
+      <path d="M-40,-20 Q-25,-33 -9,-31" stroke="#F2C68C" stroke-width="3" fill="none" stroke-linecap="round"/>
       <ellipse cx="-2" cy="-8" rx="30" ry="8" fill="#F5D3A0"/>
     </g>
     <ellipse cx="-28" cy="-6" rx="13" ry="7" fill="#D39148"/>
@@ -183,7 +231,8 @@ function dogSVG(awake) {
     <g transform="translate(32 ${awake ? -30 : -19})">
       <path class="ear" d="M-14,-8 L-10,-30 L0,-14 Z" fill="#C98640"/>
       <path class="ear" d="M4,-12 L14,-30 L18,-8 Z" fill="#C98640" style="animation-delay:.25s"/>
-      <circle r="17" fill="#E3A45A"/>
+      <circle r="17" fill="#E3A45A" stroke="#976236" stroke-width="1.5"/>
+      <path d="M-12,-12 Q-4,-20 5,-15" stroke="#F2C68C" stroke-width="2" fill="none" stroke-linecap="round"/>
       <ellipse cx="11" cy="7" rx="10" ry="7.5" fill="#F5D3A0"/>
       <ellipse cx="19" cy="4" rx="3.6" ry="3" fill="#4A2C1A"/>
       ${awake
@@ -196,7 +245,9 @@ function dogSVG(awake) {
 // ---------- Nhân vật chibi ----------
 function eyesSVG(mood, lx) {
   const E = '#2A1B17';
-  const open = x => `<ellipse cx="${x + lx}" cy="5" rx="3.7" ry="4.9" fill="${E}"/><circle cx="${x + lx + 1.3}" cy="3" r="1.4" fill="#fff"/>`;
+  const open = x => `<path d="M${x - 5.5 + lx},2 Q${x + lx},-2 ${x + 5.5 + lx},2" stroke="${E}" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <ellipse cx="${x + lx}" cy="6" rx="4.7" ry="6.4" fill="${E}"/><ellipse cx="${x + lx}" cy="9" rx="2.5" ry="2.7" fill="#74513B"/>
+    <circle cx="${x + lx + 1.5}" cy="3.5" r="1.8" fill="#FFFDF5"/><circle cx="${x + lx - 1.5}" cy="8" r=".8" fill="#FFFDF5"/>`;
   switch (mood) {
     case 'happy': return `<path d="M-15,7 Q-11,0 -7,7 M7,7 Q11,0 15,7" stroke="${E}" stroke-width="2.8" fill="none" stroke-linecap="round"/>
       <path d="M-8,14 Q0,27 8,14 Z" fill="#8C2F2F"/><path d="M-4,20 Q0,24 4,20 Z" fill="#FF8A80"/>`;
@@ -278,20 +329,29 @@ function headSVG(L, mood = 'idle', look = 0) {
   // kẹp tóc nhỏ bên trái (tóc bob / dài / búi)
   const clip = L.clip && ['bob', 'long', 'bun'].includes(L.hairStyle)
     ? `<rect x="-26" y="-27" width="11" height="5" rx="2.5" fill="${L.clip}" transform="rotate(-28 -20 -24)"/>` : '';
-  return back +
-    `<circle cx="-30" cy="5" r="7" fill="${s}"/><circle cx="30" cy="5" r="7" fill="${s}"/>
-     <ellipse cy="3" rx="30" ry="28.5" fill="${s}"/>` + front + clip +
+  return `<g stroke="#51392E" stroke-width="1.8" stroke-linejoin="round">${back}</g>` +
+    `<g stroke="${shade(s, .68)}" stroke-width="1.6"><ellipse cx="-30" cy="6" rx="6.5" ry="8" fill="${s}"/><ellipse cx="30" cy="6" rx="6.5" ry="8" fill="${s}"/>
+     <path d="M-29,-12 Q-36,4 -27,19 Q-17,33 0,33 Q17,33 27,19 Q36,4 29,-12 Q0,-30 -29,-12 Z" fill="${s}"/></g>
+     <path d="M-29,5 Q-26,24 -8,30 Q13,35 27,15 Q20,33 0,33 Q-21,33 -29,5 Z" fill="${shade(s, .89)}"/>
+     <ellipse cx="-12" cy="-1" rx="10" ry="6" fill="#FFF4DA" opacity=".24"/>
+     <path d="M-32,4 Q-27,2 -29,9 M32,4 Q27,2 29,9" stroke="${shade(s, .78)}" stroke-width="1.3" fill="none"/>
+     <path d="M-2,12 Q0,15 2,12" stroke="${shade(s, .76)}" stroke-width="1.3" fill="none" stroke-linecap="round"/>` +
+    `<g stroke="#51392E" stroke-width="1.8" stroke-linejoin="round">${front}</g>` + clip +
+    (['cap', 'police', 'buzz'].includes(L.hairStyle) ? '' : `<path d="M-22,-25 Q-14,-36 -3,-34 M-15,-23 Q-5,-33 8,-31 M14,-29 Q24,-24 25,-16" fill="none" stroke="${shade(h, 1.9)}" stroke-width="2.4" stroke-linecap="round" opacity=".5"/>
+      <path d="M-18,-16 Q-13,-22 -7,-22 M4,-19 Q9,-25 14,-23" fill="none" stroke="${shade(h, .68)}" stroke-width="1.8" stroke-linecap="round"/>`) +
     (L.beard ? `<path d="M-22,12 Q-20,30 0,31 Q20,30 22,12 Q12,22 0,22 Q-12,22 -22,12 Z" fill="${h}" opacity=".55"/>
       <path d="M-9,13 Q0,9 9,13 Q0,16 -9,13 Z" fill="${h}"/>` : '') + eyesSVG(mood, look) +
-    `<ellipse cx="-19" cy="13" rx="${blushR}" ry="3.4" fill="#FF8F7E" opacity=".45"/><ellipse cx="19" cy="13" rx="${blushR}" ry="3.4" fill="#FF8F7E" opacity=".45"/>` +
+    `<ellipse cx="-20" cy="15" rx="${blushR}" ry="4" fill="#E88373" opacity=".4"/><ellipse cx="20" cy="15" rx="${blushR}" ry="4" fill="#E88373" opacity=".4"/>` +
     (L.glasses && mood !== 'happy' && mood !== 'eat' ? `<g fill="none" stroke="#3A3A44" stroke-width="2"><circle cx="-11" cy="5" r="8.5"/><circle cx="11" cy="5" r="8.5"/><path d="M-2.5,5 H2.5"/></g>` : '');
 }
 
 function headsetSVG(L) {
-  return `<path d="M-34,4 C-36,-47 36,-47 34,4" fill="none" stroke="#24262C" stroke-width="5"/>
-    <rect x="-41" y="-7" width="13" height="23" rx="5" fill="#24262C"/><rect x="28" y="-7" width="13" height="23" rx="5" fill="#24262C"/>
-    <rect x="-39" y="-2" width="3" height="12" rx="1.5" fill="${L.accent}"/><rect x="36" y="-2" width="3" height="12" rx="1.5" fill="${L.accent}"/>
-    <path d="M-36,13 Q-32,27 -13,25" stroke="#24262C" stroke-width="2.5" fill="none"/>`;
+  const accent = L.accent || '#4CA798';
+  return `<path d="M-34,4 C-36,-47 36,-47 34,4" fill="none" stroke="#25343A" stroke-width="7"/>
+    <path d="M-31,-13 C-27,-42 27,-42 31,-13" fill="none" stroke="#697B80" stroke-width="2"/>
+    <g stroke="#202C31" stroke-width="1.8"><rect x="-41" y="-7" width="13" height="25" rx="6" fill="#42555B"/><rect x="28" y="-7" width="13" height="25" rx="6" fill="#42555B"/></g>
+    <path d="M-38,-2 V12 M38,-2 V12" stroke="${accent}" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M-36,15 Q-32,28 -13,25" stroke="#25343A" stroke-width="2.5" fill="none"/><rect x="-16" y="23" width="7" height="4" rx="2" fill="#697B80"/>`;
 }
 
 // Hoa văn trên thân áo: kẻ ngang, ca rô, chấm bi, hình in giữa ngực.
@@ -372,33 +432,43 @@ function topDetailSVG(L, top, bot, hw) {
 const SLEEVE = { tee: .38, owner: .38, polo: .38, jersey: .38, blouse: .38, dress: .3, tank: 0 };
 function armSVG(sx, sy, [hx, hy], L) {
   const t = SLEEVE[L.style] ?? .84;
-  return `<path d="M${sx},${sy} L${hx},${hy}" stroke="${L.skin}" stroke-width="8.5" stroke-linecap="round"/>` +
-    (t ? `<path d="M${sx},${sy} L${(sx + (hx - sx) * t).toFixed(1)},${(sy + (hy - sy) * t).toFixed(1)}" stroke="${L.shirt}" stroke-width="12.5" stroke-linecap="round"/>` : '');
+  const ex = (sx + (hx - sx) * t).toFixed(1), ey = (sy + (hy - sy) * t).toFixed(1);
+  return `<path d="M${sx},${sy} L${hx},${hy}" stroke="${shade(L.skin, .66)}" stroke-width="10.5" stroke-linecap="round"/>
+    <path d="M${sx},${sy} L${hx},${hy}" stroke="${L.skin}" stroke-width="7.5" stroke-linecap="round"/>` +
+    (t ? `<path d="M${sx},${sy} L${ex},${ey}" stroke="${shade(L.shirt, .62)}" stroke-width="14" stroke-linecap="round"/>
+      <path d="M${sx},${sy} L${ex},${ey}" stroke="${L.shirt}" stroke-width="11" stroke-linecap="round"/>` : '');
 }
 const handSVG = ([x, y], L, cls = '') =>
   `<g class="${cls}"><circle cx="${x}" cy="${y}" r="6.5" fill="${L.skin}" stroke="${shade(L.skin, .82)}" stroke-width="1.5"/></g>`;
 
 // ---------- Đồ ăn, thức uống ----------
 function bowlSVG(empty = false) {
-  return `<ellipse cy="1" rx="18" ry="5" fill="#000" opacity=".1"/>
-    <path d="M-18,-3 Q-16,12 0,13 Q16,12 18,-3 Z" fill="#F4EFE6" stroke="#D3C7B3" stroke-width="1"/>
-    <path d="M-12,5 H12" stroke="#2F6FB3" stroke-width="1.5" opacity=".6"/>
-    <ellipse cy="-3" rx="17" ry="5" fill="${empty ? '#E9DCC4' : '#E7A94A'}"/>
-    ${empty ? '' : `<path d="M-11,-3 q3,-3 6,0 t6,0 t6,0" stroke="#F8DB8A" stroke-width="2.2" fill="none"/>
-      <ellipse cx="5" cy="-4" rx="6.5" ry="3.6" fill="#fff"/><circle cx="5" cy="-4.2" r="2.5" fill="#F7B32B"/>
-      <circle cx="-8" cy="-5" r="1.4" fill="#4FA35A"/><circle cx="-4" cy="-2" r="1.2" fill="#4FA35A"/>`}
-    <path d="M-22,-9 L18,-5 M-22,-6 L18,-2" stroke="#C8905E" stroke-width="2" stroke-linecap="round" ${empty ? 'transform="rotate(14)"' : ''}/>`;
+  return `<ellipse cy="13" rx="17" ry="3.5" fill="#5D4630" opacity=".16"/>
+    <ellipse cy="12" rx="7" ry="2.5" fill="#D5C3A0" stroke="#8C7056" stroke-width="1"/>
+    <path d="M-19,-3 Q-16,11 0,12 Q16,11 19,-3 Z" fill="#FFF6DE" stroke="#765C43" stroke-width="1.4"/>
+    <path d="M2,10 Q13,8 17,-2 H10 Q8,7 2,10 Z" fill="#DCCCAB"/>
+    <path d="M-13,3 Q0,8 13,3" stroke="#408B83" stroke-width="2" fill="none"/>
+    <path d="M-13,0 Q-11,6 -6,7" stroke="#FFFFFF" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <ellipse cy="-3" rx="19" ry="5.5" fill="#FFF9E8" stroke="#8C7056" stroke-width="1.2"/>
+    <ellipse cy="-3" rx="16" ry="4" fill="${empty ? '#D5C7A6' : '#D59C43'}"/>
+    ${empty ? '<path d="M-8,-4 Q0,-1 8,-4" stroke="#B8A886" stroke-width="1" fill="none"/>' : `<path d="M-12,-4 q3,-4 6,0 t6,0 t6,0 M-10,-1 q3,-3 6,0 t6,0" stroke="#F8DB8A" stroke-width="1.8" fill="none"/>
+      <ellipse cx="5" cy="-4" rx="6.5" ry="3.6" fill="#FFFDF1" stroke="#D9C898" stroke-width=".6"/><ellipse cx="5" cy="-4.2" rx="2.8" ry="2" fill="#EFB332"/>
+      <path d="M-11,-6 l3,2 M-6,-5 l2,-2 M-3,-1 l3,-1" stroke="#569B62" stroke-width="1.7" stroke-linecap="round"/>
+      <g class="steam" fill="none" stroke="#FFF8E5" stroke-width="1.6" stroke-linecap="round" opacity=".8"><path d="M-9,-11 q-3,-4 0,-8 M0,-10 q3,-4 0,-8"/></g>`}
+    <path d="M-22,-9 L18,-5 M-22,-6 L18,-2" stroke="#A9784D" stroke-width="1.7" stroke-linecap="round" ${empty ? 'transform="rotate(14)"' : ''}/>`;
 }
 function cupSVG(empty = false) {
-  return `<ellipse cy="1" rx="10" ry="3" fill="#000" opacity=".1"/>
-    <path d="M-9,-26 L9,-26 L7,0 L-7,0 Z" fill="#fff" fill-opacity=".35" stroke="#CFE0E6" stroke-width="1.2"/>
+  return `<ellipse cy="1" rx="11" ry="3" fill="#5D4630" opacity=".16"/>
+    <path d="M-9,-26 L9,-26 L7,0 L-7,0 Z" fill="#D5E6DF" fill-opacity=".45" stroke="#6C918D" stroke-width="1.6"/>
     ${empty ? `<path d="M-7,-6 L7,-6 L7,0 L-7,0 Z" fill="#F6C66B" opacity=".5"/>`
       : `<path d="M-8.3,-20 L8.3,-20 L7,0 L-7,0 Z" fill="#F6C66B" opacity=".92"/>
       <rect x="-6" y="-19" width="6" height="5" rx="1" fill="#fff" opacity=".7" transform="rotate(-12 -3 -16)"/>
       <rect x="1" y="-15" width="5" height="5" rx="1" fill="#fff" opacity=".7"/>
       <circle cx="3" cy="-23" r="4" fill="#B5D84A"/><circle cx="3" cy="-23" r="2.2" fill="#E9F59A"/>
       <circle cx="-6" cy="-10" r="1" fill="#fff" opacity=".8"/><circle cx="6.5" cy="-7" r=".9" fill="#fff" opacity=".8"/>`}
-    <path d="M2,-26 L6,-38" stroke="#F07A5A" stroke-width="2.6" stroke-linecap="round"/>`;
+    <ellipse cy="-26" rx="9" ry="2.8" fill="none" stroke="#8EAEA3" stroke-width="1.2"/>
+    <path d="M-6,-20 L-5,-5" stroke="#FFFCED" stroke-width="1.6" stroke-linecap="round" opacity=".9"/>
+    <path d="M2,-26 L6,-38" stroke="#A8553D" stroke-width="3" stroke-linecap="round"/><path d="M2,-26 L6,-38" stroke="#EEAE8D" stroke-width="1.3" stroke-linecap="round"/>`;
 }
 function trashSVG() {
   return `<g transform="translate(-4 0)">${bowlSVG(true)}</g>
@@ -427,18 +497,25 @@ function standingSVG(L, o = {}) {
   let hl = [-25, -32], hr = [25, -32];
   if (o.carry) { hl = [-11, -44]; hr = [11, -44]; }
   if (o.pose === 'cook') hr = [30, -56];
-  const torso = `<path d="M-22,-24 C-24,-54 -18,-70 0,-70 C18,-70 24,-54 22,-24 Q0,-19 -22,-24 Z" fill="${L.shirt}"/>` + topDetailSVG(L, -70, -24, 22);
-  const apron = L.apron ? `<path d="M-15,-58 L15,-58 L19,-22 Q0,-17 -19,-22 Z" fill="#1FA89A"/>
+  const torso = `<path d="M-22,-24 C-24,-54 -18,-70 0,-70 C18,-70 24,-54 22,-24 Q0,-19 -22,-24 Z" fill="${L.shirt}" stroke="${shade(L.shirt, .65)}" stroke-width="1.8"/>` + topDetailSVG(L, -70, -24, 22) +
+    `<path d="M-19,-48 Q-18,-31 -15,-27 M15,-33 L18,-28" fill="none" stroke="${shade(L.shirt, .75)}" stroke-width="1.5" stroke-linecap="round" opacity=".6"/>`;
+  const apron = L.apron ? `<path d="M-15,-58 L15,-58 L19,-22 Q0,-17 -19,-22 Z" fill="#238D80" stroke="#175C53" stroke-width="1.5"/>
       <path d="M-15,-58 L-12,-68 M15,-58 L12,-68" stroke="#1FA89A" stroke-width="3"/>
-      <text y="-36" text-anchor="middle" font-size="9" font-weight="800" fill="#FFF3DA">NET</text>` : '';
+      <path d="M-10,-35 H10 V-25 Q0,-21 -10,-25 Z" fill="#3AA294" stroke="#175C53"/>
+      <text y="-42" text-anchor="middle" font-size="9" font-weight="800" fill="#FFF3DA">NET</text>` : '';
   const towel = L.towel ? `<path d="M6,-70 Q22,-73 24,-62 L22,-38 L14,-38 L15,-62 Z" fill="#fff" stroke="#E0DCD2"/><path d="M14,-44 H22" stroke="#F07A5A" stroke-width="2"/>` : '';
   const helmet = L.helmet && !o.carry
     ? `<g transform="translate(${hl[0] - 3} ${hl[1] + 8})"><path d="M-14,0 A14,13 0 0 1 14,0 Z" fill="${L.helmet}"/><rect x="-15" y="-1" width="30" height="4" rx="2" fill="${shade(L.helmet, .7)}"/><path d="M-6,-9 Q0,-12 6,-9" stroke="#fff" opacity=".5" stroke-width="2" fill="none"/></g>` : '';
   const bag = L.bag ? `<path d="M-17,-64 L15,-32" stroke="#6B4A2F" stroke-width="3.5"/><rect x="9" y="-38" width="15" height="12" rx="3" fill="#8A5A3B"/>` : '';
   const carry = o.carry ? `<g class="held" transform="translate(0 -46)">${o.carry === 'bowl' ? bowlSVG() : `<g transform="translate(0 4)">${cupSVG()}</g>`}</g>` : '';
   const hood = L.style === 'hoodie' || L.style === 'jacket' ? `<path d="M-24,-62 Q-28,-96 0,-98 Q28,-96 24,-62 Z" fill="${L.trim}"/>` : '';
-  return `<ellipse rx="22" ry="6" fill="#3A2A22" opacity=".16"/>${legs}
-    <g class="upper" ${o.stool ? 'transform="translate(0 -12)"' : ''}>${hood}${torso}${apron}${towel}${bag}
+  return `<ellipse cx="2" cy="1" rx="25" ry="6" fill="#3A2A22" opacity=".12"/><ellipse rx="16" ry="3" fill="#3A2A22" opacity=".1"/>
+    <g stroke="${shade(shin, .65)}" stroke-width="1.2" stroke-linejoin="round">${legs}</g>
+    ${o.stool ? '' : `<path d="M-11,-4 L-4,-4 M4,-4 L11,-4" stroke="#BABBB0" stroke-width="1" stroke-linecap="round"/>
+      <path d="M-9,-26 V-11 M6,-26 V-11" stroke="${shade(shin, 1.3)}" stroke-width="1.2" opacity=".5"/>`}
+    <g class="upper" stroke-linejoin="round" ${o.stool ? 'transform="translate(0 -12)"' : ''}>${hood}${torso}${apron}${towel}${bag}
+      <path d="M-20,-48 Q-22,-30 -16,-25 L-7,-24 Q-15,-32 -14,-46 Z" fill="${shade(L.shirt, .78)}" opacity=".6"/>
+      <path d="M-14,-65 Q-7,-70 3,-69" stroke="${shade(L.shirt, 1.17)}" stroke-width="2" fill="none" stroke-linecap="round"/>
       ${armSVG(-18, -62, hl, L)}<g class="${o.pose === 'cook' ? 'stir' : ''}">${armSVG(18, -62, hr, L)}${handSVG(hr, L)}</g>
       ${handSVG(hl, L)}${helmet}
       <g transform="translate(0 -98)">${headSVG(L, o.mood || 'idle', o.look || 0)}${L.headset && !o.owner ? headsetSVG(L) : ''}</g>
@@ -454,21 +531,44 @@ const DESKS = [
   { w: 106, top: '#EDE3D2', edge: '#B89C78', leg: '#DCD0BC', glow: true },
 ];
 function chairSVG(lv) {
-  switch (lv) {
-    case 0: return `<rect x="-38" y="-214" width="76" height="72" rx="13" fill="#3D7FD6"/>
-      <rect x="-27" y="-201" width="54" height="7" rx="3.5" fill="#2C66B4"/><rect x="-27" y="-187" width="54" height="7" rx="3.5" fill="#2C66B4"/>`;
-    case 1: return `<rect x="-36" y="-234" width="72" height="96" rx="17" fill="#2F323A"/><rect x="-28" y="-224" width="56" height="74" rx="13" fill="#3C4049"/>
-      <rect x="-48" y="-162" width="16" height="8" rx="4" fill="#222"/><rect x="32" y="-162" width="16" height="8" rx="4" fill="#222"/>`;
-    case 2: return `<path d="M-46,-236 L-56,-212 L-44,-192 Z M46,-236 L56,-212 L44,-192 Z" fill="#2A2E36"/>
-      <path d="M-42,-140 L-46,-236 Q-44,-270 -22,-278 L22,-278 Q44,-270 46,-236 L42,-140 Z" fill="#1F2228"/>
-      <path d="M-20,-272 L-14,-150 M20,-272 L14,-150" stroke="#1FA89A" stroke-width="7"/>
-      <path d="M-7,-262 L0,-253 L7,-262 L0,-271 Z" fill="#46E6F2"/>
-      <rect x="-54" y="-164" width="18" height="9" rx="4" fill="#15161A"/><rect x="36" y="-164" width="18" height="9" rx="4" fill="#15161A"/>`;
-    default: return `<rect x="-6" y="-256" width="12" height="24" fill="#9AA1A9"/>
-      <rect x="-32" y="-288" width="64" height="32" rx="13" fill="#5D6570" stroke="#D5DAE0" stroke-width="3"/>
-      <rect x="-40" y="-238" width="80" height="98" rx="20" fill="url(#pMesh)" stroke="#D5DAE0" stroke-width="4"/>
-      <rect x="-54" y="-164" width="18" height="9" rx="4" fill="#D5DAE0"/><rect x="36" y="-164" width="18" height="9" rx="4" fill="#D5DAE0"/>`;
+  const base = lv === 0
+    ? `<path d="M-28,-135 L-34,-13 M28,-135 L34,-13" stroke="#456C7A" stroke-width="8"/><path d="M-28,-120 L-32,-25 M28,-120 L32,-25" stroke="#91B6BF" stroke-width="2"/>
+      <path d="M-37,-146 Q0,-134 37,-146 L36,-130 Q0,-117 -36,-130 Z" fill="url(#gBlueSeat)"/>`
+    : `<rect x="-6" y="-138" width="12" height="100" rx="4" fill="url(#gMetal)"/><path d="M0,-42 L-38,-17 M0,-42 L38,-17 M0,-42 V-10" stroke="#39454B" stroke-width="8" stroke-linecap="round"/>
+      <path d="M0,-44 L-32,-22 M0,-44 L32,-22" stroke="#7D8B8D" stroke-width="2"/>
+      ${[-38,0,38].map(x => `<ellipse cx="${x}" cy="${x ? -14 : -8}" rx="7" ry="5" fill="#26343A"/><path d="M${x - 4},${x ? -15 : -9} H${x + 3}" stroke="#788C8E" stroke-width="1.3"/>`).join('')}
+      <path d="M-37,-149 Q0,-156 37,-149 L39,-131 Q0,-121 -39,-131 Z" fill="url(#gLeather)"/>`;
+  let back;
+  if (lv === 0) {
+    back = `<path d="M-37,-146 L-39,-204 Q-38,-220 -22,-220 H22 Q38,-220 39,-204 L37,-146 Z" fill="url(#gBlueSeat)" stroke="#345D70" stroke-width="2.5"/>
+      <path d="M-28,-201 H28 M-28,-188 H28 M-28,-175 H28" stroke="#376C81" stroke-width="6" stroke-linecap="round"/>
+      <path d="M-27,-204 H26 M-27,-191 H26 M-27,-178 H26" stroke="#ABD3D9" stroke-width="1.5" opacity=".7"/>
+      <path d="M-34,-208 Q-34,-217 -23,-217 H21" stroke="#C0D8D8" stroke-width="2" fill="none"/>
+      <path d="M-35,-162 Q0,-153 35,-162" stroke="#345D70" stroke-width="2" fill="none"/>`;
+  } else if (lv === 1) {
+    back = `<rect x="-37" y="-236" width="74" height="99" rx="22" fill="url(#gLeather)" stroke="#26363B" stroke-width="2.5"/>
+      <rect x="-29" y="-227" width="58" height="78" rx="17" fill="#46545A" stroke="#6E7B7C" stroke-width="1.2"/>
+      <path d="M-22,-218 Q0,-225 22,-218 M-23,-190 Q0,-185 23,-190 M0,-222 V-155" stroke="#2C3E45" stroke-width="1.8" fill="none"/>
+      <path d="M-26,-213 V-163" stroke="#8B9693" stroke-width="2" opacity=".6"/>
+      <rect x="-49" y="-164" width="19" height="10" rx="5" fill="#34434A"/><rect x="30" y="-164" width="19" height="10" rx="5" fill="#34434A"/>`;
+  } else if (lv === 2) {
+    back = `<path d="M-42,-139 L-47,-237 Q-47,-266 -23,-279 H23 Q47,-266 47,-237 L42,-139 Z" fill="url(#gLeather)" stroke="#203438" stroke-width="2.5"/>
+      <path d="M-28,-267 L-34,-236 L-26,-210 L-25,-150 M28,-267 L34,-236 L26,-210 L25,-150" stroke="#3EAC9B" stroke-width="10" fill="none" stroke-linejoin="round"/>
+      <path d="M-27,-266 L-30,-237 M27,-266 L30,-237" stroke="#97D7BD" stroke-width="2" fill="none"/>
+      <path d="M-16,-273 H16 L20,-258 H-20 Z" fill="#203238"/>
+      <path d="M-9,-267 L-4,-260 M9,-267 L4,-260" stroke="#9EBDB4" stroke-width="3" stroke-linecap="round"/>
+      <path d="M-20,-233 Q0,-223 20,-233 L17,-208 Q0,-200 -17,-208 Z" fill="#344A4E" stroke="#738C85"/>
+      <path d="M-20,-186 Q0,-177 20,-186" stroke="#738C85" stroke-width="1.5" fill="none"/>
+      <rect x="-54" y="-164" width="21" height="11" rx="5" fill="#31474B"/><rect x="33" y="-164" width="21" height="11" rx="5" fill="#31474B"/>`;
+  } else {
+    back = `<rect x="-6" y="-263" width="12" height="28" fill="url(#gMetal)"/><rect x="-32" y="-289" width="64" height="30" rx="12" fill="url(#gLeather)" stroke="#D4D9CD" stroke-width="3"/>
+      <path d="M-22,-282 Q0,-286 22,-282" stroke="#A0B2AC" stroke-width="1.5" fill="none"/>
+      <rect x="-42" y="-240" width="84" height="103" rx="21" fill="#526767" stroke="#C5D3C5" stroke-width="5"/>
+      <rect x="-34" y="-232" width="68" height="83" rx="16" fill="url(#pMesh)" stroke="#8BA399"/>
+      <path d="M-32,-184 Q0,-170 32,-184" stroke="#B2CAB9" stroke-width="4" fill="none"/>
+      <rect x="-54" y="-166" width="21" height="11" rx="5" fill="#D3DDCC"/><rect x="33" y="-166" width="21" height="11" rx="5" fill="#D3DDCC"/>`;
   }
+  return base + back;
 }
 function monitorSVG(lv) {
   const M = [
@@ -486,9 +586,15 @@ function monitorSVG(lv) {
     ? `<rect x="-22" y="${y + 8}" width="44" height="30" rx="6" fill="${shade(M.c, .9)}"/><circle cx="0" cy="${y + 23}" r="3" fill="#9A927F"/>`
     : `<rect x="-17" y="${y + M.h * .3}" width="34" height="${M.h * .45}" rx="4" fill="${shade(M.c, 1.25)}"/>`;
   const ring = M.ring ? `<circle cx="0" cy="${y + M.h * .5}" r="${lv === 3 ? 15 : 12}" fill="none" stroke="${M.ring}" stroke-width="3" class="rgb"/>` : '';
-  return `<ellipse cx="0" cy="-118" rx="${lv === 3 ? 26 : 19}" ry="4.5" fill="${M.base}"/>
-    <rect x="-4" y="${M.b - 4}" width="8" height="${-118 - M.b + 4}" fill="${M.base}"/>
-    ${panel}${bulge}${ring}`;
+  const vents = Array.from({ length: lv === 0 ? 7 : 9 }, (_, i) => `<path d="M${x + 8 + i * 4},${y + 7} v5" stroke="${shade(M.c, .58)}" stroke-width="1.6"/>`).join('');
+  return `<ellipse cx="3" cy="-116" rx="${lv === 3 ? 29 : 23}" ry="5" fill="#3A2A22" opacity=".18"/>
+    <path d="M-20,-123 H20 L25,-118 Q0,-113 -25,-118 Z" fill="${M.base}"/><path d="M-15,-122 H15" stroke="#D6DBCB" stroke-width="1" opacity=".65"/>
+    <rect x="-4" y="${M.b - 4}" width="8" height="${-118 - M.b + 4}" rx="2" fill="${M.base}"/>
+    <g transform="translate(3 3)" fill="${shade(M.c, .6)}">${panel}</g>${panel}
+    <path d="M${x + 5},${y + 3} ${M.curve ? `Q0,${y + 10}` : 'L'} ${-x - 5},${y + 3}" stroke="${shade(M.c, 1.5)}" stroke-width="2" opacity=".7" fill="none"/>
+    ${vents}${bulge}${ring}<path d="M-3,${M.b - 2} Q-20,-99 -6,-83 Q6,-67 -8,-44" stroke="#514C43" stroke-width="2" fill="none"/>
+    <rect x="${x + 6}" y="${M.b - 8}" width="11" height="3" rx="1" fill="${shade(M.c, .62)}"/>
+    <circle cx="${-x - 8}" cy="${M.b - 6}" r="1.4" fill="#84B5A4"/>`;
 }
 function keyboardSVG(lv) {
   const base = ['#DCD6C8', '#2B2B31', '#1D1D22', '#F4EAD8'][lv];
@@ -501,32 +607,55 @@ function keyboardSVG(lv) {
       keys += `<rect x="${x.toFixed(1)}" y="${y}" width="5" height="2.6" rx=".6" fill="${fill}"/>`;
     }
   });
-  return `<polygon points="-35,-117 31,-117 34,-104 -38,-104" fill="${base}" stroke="${shade(base, .78)}" stroke-width="1"/>
-    <g class="${lv === 2 ? 'rgb' : ''}">${keys}</g>`;
+  return `<path d="M-37,-104 H34 V-101 H-37 Z" fill="${shade(base, .6)}"/>
+    <polygon points="-35,-117 31,-117 34,-104 -38,-104" fill="${base}" stroke="${shade(base, .7)}" stroke-width="1.2"/>
+    <path d="M-32,-116 H28" stroke="#FFF9E5" stroke-width="1" opacity=".6"/>
+    <g class="${lv === 2 ? 'rgb' : ''}">${keys}</g><rect x="-13" y="-105" width="26" height="1.5" rx=".6" fill="${shade(base, .74)}"/>`;
 }
 function mouseSVG(lv) {
-  const pad = lv === 1 || lv === 2 ? `<rect x="40" y="-121" width="32" height="19" rx="3" fill="#1D2230"/>` : '';
+  const pad = lv === 1 || lv === 2 ? `<rect x="40" y="-121" width="32" height="19" rx="3" fill="#293C44" stroke="#596D71" stroke-width=".8"/><path d="M43,-118 H68" stroke="#768C86" stroke-width=".6"/>` : '';
   const body = [
     `<path d="M55,-117 Q60,-128 44,-124" stroke="#9A927F" stroke-width="1.2" fill="none"/><ellipse cx="55" cy="-110" rx="5.5" ry="7.5" fill="#E4DECF" stroke="#BDB39C"/>`,
     `<ellipse cx="55" cy="-110" rx="5.5" ry="7.5" fill="#26262C"/><path d="M55,-117 V-112" stroke="#E2463A" stroke-width="1.5"/>`,
     `<ellipse cx="55" cy="-110" rx="5.5" ry="7.5" fill="#F4F5F7" stroke="#C9CDD2"/>`,
     `<ellipse cx="55" cy="-110" rx="7.5" ry="9.5" fill="none" stroke="#46E6F2" stroke-width="2" class="rgb" opacity=".8"/><ellipse cx="55" cy="-110" rx="5.5" ry="7.5" fill="#1B1B20"/>`,
   ][lv];
-  return pad + body;
+  return pad + `<ellipse cx="56" cy="-107" rx="7" ry="8" fill="#1C292D" opacity=".17"/>` + body +
+    `<path d="M52,-115 Q49,-112 50,-108" stroke="#E5EBDA" stroke-width="1" opacity=".7" fill="none"/>
+    <path d="M55,-117 V-113" stroke="#71998E" stroke-width="1.6" stroke-linecap="round"/>`;
 }
 function caseSVG(lv) {
-  switch (lv) {
-    case 0: return `<rect x="42" y="-80" width="36" height="78" rx="3" fill="#DCD4C0" stroke="#BDB39C" stroke-width="1.5"/>
-      <rect x="47" y="-72" width="26" height="7" fill="#CFC6B0" stroke="#B0A68E"/><rect x="47" y="-61" width="26" height="7" fill="#CFC6B0" stroke="#B0A68E"/>
-      <circle cx="60" cy="-30" r="3.5" fill="#A8A08A"/><circle cx="69" cy="-12" r="1.8" fill="#5BE36A"/>`;
-    case 1: return `<rect x="42" y="-82" width="36" height="80" rx="3" fill="#2A2C33"/>
-      <rect x="46" y="-76" width="3" height="68" rx="1.5" fill="#4AA8FF"/><circle cx="66" cy="-72" r="3" fill="#4AA8FF"/>`;
-    case 2: return `<rect x="40" y="-86" width="40" height="84" rx="3" fill="#1B1D22"/><rect x="44" y="-82" width="32" height="76" rx="2" fill="#10131A"/>
-      <g fill="none" stroke="#46E6F2" stroke-width="3"><circle cx="60" cy="-62" r="10"/><circle cx="60" cy="-32" r="10"/></g>
-      <g class="spin-slow" fill="#46E6F2" opacity=".5"><circle cx="60" cy="-62" r="4"/></g>`;
-    default: return `<rect x="38" y="-92" width="44" height="90" rx="4" fill="#EEF0F4"/><rect x="42" y="-88" width="36" height="82" rx="2" fill="#1A1530"/>
-      <g fill="none" stroke-width="3" class="rgb"><circle cx="60" cy="-72" r="8.5" stroke="#A57BFF"/><circle cx="60" cy="-48" r="8.5" stroke="#46E6F2"/><circle cx="60" cy="-24" r="8.5" stroke="#FF6FB5"/></g>`;
+  const x = lv >= 2 ? 38 : 42, top = [-80,-82,-86,-92][lv], w = lv >= 2 ? 44 : 36;
+  const light = lv === 0 || lv === 3, edge = light ? '#8F9386' : '#182C33';
+  const panel = light ? 'url(#gPlastic)' : 'url(#gLeather)';
+  let detail;
+  if (lv === 0) {
+    detail = `<rect x="47" y="-73" width="26" height="7" rx="1" fill="#B4AB94"/>
+      <path d="M49,-69 H69 M49,-59 H69" stroke="#756E5D" stroke-width="1.3"/><rect x="47" y="-63" width="26" height="8" rx="1" fill="#C9BFA6"/>
+      <circle cx="60" cy="-44" r="3" fill="#8D978A" stroke="#F3EAD6"/>
+      ${Array.from({ length: 5 }, (_, i) => `<path d="M48,${-31 + i * 4} H71" stroke="#A69F8A" stroke-width="1.5"/>`).join('')}
+      <rect x="45" y="-51" width="10" height="4" rx="1" fill="#F3EAD6"/><path d="M46,-49 H53" stroke="#739185" stroke-width="1"/>`;
+  } else if (lv === 1) {
+    detail = `<path d="M47,-76 V-12" stroke="#75BABB" stroke-width="3"/>
+      <rect x="52" y="-65" width="20" height="49" rx="2" fill="#23343B"/>
+      ${Array.from({ length: 6 }, (_, i) => `<path d="M55,${-57 + i * 6} H69" stroke="#455B61" stroke-width="1.5"/>`).join('')}
+      <circle cx="66" cy="-72" r="2.5" fill="#76B8B1"/>`;
+  } else {
+    const colors = lv === 2 ? ['#69C7B9','#69C7B9'] : ['#B3A2DA','#7BCAC2','#E4A3AB'];
+    const ys = lv === 2 ? [-63,-30] : [-72,-48,-24];
+    detail = `<rect x="43" y="${top + 5}" width="34" height="${-8 - top}" rx="2" fill="url(#gGlass)"/>` + ys.map((y, i) =>
+      `<g transform="translate(60 ${y})"><circle r="${lv === 2 ? 12 : 10}" fill="#172930" stroke="${colors[i]}" stroke-width="2.4"/>
+        ${Array.from({ length: 5 }, (_, a) => `<path d="M0,-2 Q-9,-11 -8,-3 Q-5,1 0,2 Z" fill="#5B767D" transform="rotate(${a * 72})"/>`).join('')}
+        <circle r="2.8" fill="#B8D5CA"/><circle r="${lv === 2 ? 9 : 7}" fill="none" stroke="#E9F4DC" stroke-width=".6" opacity=".45"/></g>`).join('') +
+      `<path d="M45,${top + 9} L74,${top + 32} V${top + 18} L61,${top + 7} Z" fill="#D8F1E4" opacity=".12"/>`;
   }
+  return `<ellipse cx="64" cy="-2" rx="27" ry="5" fill="#342D24" opacity=".18"/>
+    <path d="M${x},${top} L${x + w - 4},${top} L${x + w + 4},${top - 5} L${x + 7},${top - 5} Z" fill="${light ? '#EEE7D6' : '#677577'}"/>
+    <path d="M${x + w - 4},${top} L${x + w + 4},${top - 5} V-8 L${x + w - 4},-2 Z" fill="${light ? '#B7B5A3' : '#1C3038'}"/>
+    <rect x="${x}" y="${top}" width="${w - 4}" height="${-2 - top}" rx="3" fill="${panel}" stroke="${edge}" stroke-width="1.5"/>${detail}
+    <path d="M${x + 2},${top + 4} V-9" stroke="#F4F0DC" stroke-width="1.3" opacity=".45"/>
+    <circle cx="69" cy="-9" r="1.6" fill="#A4D09A"/><rect x="47" y="${top + 3}" width="4" height="2" rx=".5" fill="#203A40"/>
+    <rect x="44" y="-4" width="5" height="5" rx="1" fill="#52615D"/><rect x="71" y="-4" width="5" height="5" rx="1" fill="#52615D"/>`;
 }
 
 const POSES = {
@@ -554,18 +683,21 @@ function stationSVG(st) {
     const chop = c.pose === 'eat' ? `<path d="M12,-186 L-2,-201 M15,-188 L2,-203" stroke="#C8905E" stroke-width="2.2" stroke-linecap="round"/><path d="M0,-200 q-4,10 1,18" stroke="#F8DB8A" stroke-width="2.4" fill="none"/>` : '';
     const heldCup = c.pose === 'drink' ? `<g transform="translate(8 -176) rotate(-10)">${cupSVG()}</g>` : '';
     body = `<g class="${p.peek ? 'peek' : ''} ${c.pose === 'win' ? 'hop' : ''} ${c.pose === 'lose' ? 'shake' : ''} ${c.justSat ? 'sit-in' : ''}">
-      ${hood}<path d="M-25,-126 C-27,-160 -21,-188 0,-188 C21,-188 27,-160 25,-126 Z" fill="${L.shirt}"/>${topDetailSVG(L, -188, -126, 25)}
+      ${hood}<path d="M-25,-126 C-27,-160 -21,-188 0,-188 C21,-188 27,-160 25,-126 Z" fill="${L.shirt}" stroke="${shade(L.shirt, .65)}" stroke-width="1.8"/>${topDetailSVG(L, -188, -126, 25)}
       ${armSVG(-19, -178, p.l, L)}${p.frontR ? '' : armSVG(19, -178, p.r, L)}
       ${face}${hi(p.l)}${p.frontR ? armSVG(19, -178, p.r, L) : ''}${hi(p.r)}${chop}${heldCup}
     </g>`;
   }
 
-  let s = `<ellipse cx="0" cy="-2" rx="${D.w + 22}" ry="12" fill="#3A2A22" opacity=".13"/>
+  let s = `<ellipse cx="3" cy="-1" rx="${D.w + 22}" ry="14" fill="#3A2A22" opacity=".11"/>
+    <ellipse cx="4" cy="-2" rx="${D.w - 10}" ry="8" fill="#3A2A22" opacity=".1"/>
     <path class="hl" d="M${-D.w - 16},-6 Q0,14 ${D.w + 16},-6" stroke="#1FA89A" stroke-width="4" fill="none" stroke-linecap="round"/>
-    <g class="seat ${c && c.pose === 'win' ? 'nudge' : ''}">${chairSVG(m.chair)}${body}</g>`;
+    <g class="seat ${c && c.pose === 'win' ? 'nudge' : ''}"><g stroke="#4C4740" stroke-width="1.8" stroke-linejoin="round">${chairSVG(m.chair)}</g>${body}</g>`;
 
   // Mặt bàn + đồ trên bàn
-  s += `<path d="M${-D.w},-122 L${D.w},-122 L${D.w + 4},-92 L${-D.w - 4},-92 Z" fill="${D.top}"/>`;
+  s += `<path d="M${-D.w},-122 L${D.w},-122 L${D.w + 4},-92 L${-D.w - 4},-92 Z" fill="${m.chair < 2 ? 'url(#gOak)' : D.top}" stroke="${D.edge}" stroke-width="2" stroke-linejoin="round"/>
+    ${m.chair < 2 ? [0,1,2].map(i => `<path d="M${-D.w + 7},${-117 + i * 7} Q-20,${-114 + i * 7} ${D.w - 9},${-117 + i * 7}" stroke="#98683F" stroke-width=".9" opacity=".4" fill="none"/>`).join('') : ''}
+    <path d="M${-D.w + 6},-120 H${D.w - 6}" stroke="#FFF3DD" stroke-width="1.8" opacity=".6"/>`;
   if (m.mouse === 3) s += `<rect x="-58" y="-121" width="134" height="21" rx="4" fill="#2A2240" stroke="#A57BFF" stroke-width="1.5"/>`;
   s += keyboardSVG(m.kb) + mouseSVG(m.mouse);
   if (st.trash) s += `<g transform="translate(-60 -104)">${trashSVG()}</g>`;
@@ -579,7 +711,7 @@ function stationSVG(st) {
     if (low(p.l)) s += handSVG(p.l, L, p.type ? 'tap' : '');
     if (low(p.r)) s += handSVG(p.r, L, p.type ? 'jig' : '');
   }
-  s += monitorSVG(m.mon);
+  s += `<g stroke="#4C4740" stroke-width="1.6" stroke-linejoin="round">${monitorSVG(m.mon)}</g>`;
 
   // Mép bàn, chân bàn, gầm bàn
   if (c) {
@@ -587,9 +719,15 @@ function stationSVG(st) {
       <rect x="-15" y="-82" width="11" height="36" rx="4" fill="${L.pants}"/><rect x="4" y="-82" width="11" height="36" rx="4" fill="${L.pants}"/>
       <ellipse cx="-10" cy="-44" rx="8" ry="4" fill="${L.sandal}"/><ellipse cx="10" cy="-44" rx="8" ry="4" fill="${L.sandal}"/></g>`;
   }
-  s += caseSVG(tier - 1);
-  s += `<rect x="${-D.w - 4}" y="-92" width="${2 * D.w + 8}" height="10" rx="2" fill="${D.edge}"/>
-    <rect x="${-D.w}" y="-84" width="${D.glow ? 14 : 8}" height="84" fill="${D.leg}"/><rect x="${D.w - (D.glow ? 14 : 8)}" y="-84" width="${D.glow ? 14 : 8}" height="84" fill="${D.leg}"/>`;
+  s += `<g stroke="#4C4740" stroke-width="1.6" stroke-linejoin="round">${caseSVG(tier - 1)}</g>`;
+  s += `<path d="M-48,-84 Q-70,-37 -38,-25 Q-10,-15 -19,-48 Q-26,-60 -36,-37" fill="none" stroke="#514B3F" stroke-width="1.6" opacity=".8"/>
+    <rect x="${-D.w - 4}" y="-92" width="${2 * D.w + 8}" height="10" rx="2" fill="${D.edge}"/>
+    <path d="M${-D.w},-90 H${D.w}" stroke="#E9C799" stroke-width="1.2" opacity=".45"/>
+    <path d="M${-D.w},-82 H${D.w}" stroke="#4B3929" stroke-width="2" opacity=".3"/>
+    <rect x="${-D.w}" y="-84" width="${D.glow ? 14 : 8}" height="84" fill="${D.leg}"/><rect x="${D.w - (D.glow ? 14 : 8)}" y="-84" width="${D.glow ? 14 : 8}" height="84" fill="${D.leg}"/>
+    <path d="M${-D.w + 2},-80 V-8 M${D.w - 6},-80 V-8" stroke="#E4BB87" stroke-width="1.3" opacity=".4"/>
+    <g fill="#3C3B32"><rect x="${-D.w - 1}" y="-4" width="11" height="5" rx="1"/><rect x="${D.w - 9}" y="-4" width="11" height="5" rx="1"/></g>
+    <g fill="#785940">${[-D.w + 5,D.w - 5].map(x => `<circle cx="${x}" cy="-86" r="1.3"/>`).join('')}</g>`;
   if (D.rgb) s += `<rect class="rgb" x="${-D.w + 4}" y="-88" width="${2 * D.w - 8}" height="3" rx="1.5" fill="url(#gRainbow)"/>`;
   s += `<g transform="translate(${-D.w + 16} -87)"><rect x="-12" y="-6" width="24" height="12" rx="4" fill="#1FA89A"/>
     <text y="3.5" text-anchor="middle" font-size="9" font-weight="800" fill="#fff">${String(st.i + 1).padStart(2, '0')}</text></g>`;
@@ -749,7 +887,11 @@ function makeLook(seg, gender) {
 function priceBoardSVG(lines) {
   return `<g transform="translate(92 70)">
     <path d="M0,-10 L-58,8 M0,-10 L58,8" stroke="#6B4A2F" stroke-width="2"/><circle cy="-10" r="3" fill="#666"/>
-    <rect x="-72" y="6" width="144" height="136" rx="6" fill="#8A5A3B"/><rect x="-65" y="13" width="130" height="122" rx="3" fill="#2F3B35"/>
+    <rect x="-70" y="9" width="144" height="136" rx="6" fill="#342F26" opacity=".18"/>
+    <rect x="-72" y="6" width="144" height="136" rx="6" fill="url(#gWood)" stroke="#735139" stroke-width="2"/>
+    <rect x="-65" y="13" width="130" height="122" rx="3" fill="#2F4A3F" stroke="#D3AF77" stroke-width="1.5"/>
+    <path d="M-62,15 H61 M-68,138 H68" stroke="#F5DBAA" stroke-width="1.2" opacity=".6"/>
+    <path d="M-56,125 H30" stroke="#D8E5C3" stroke-width=".7" opacity=".22"/>
     <text class="chalk" y="40" text-anchor="middle" font-size="22" fill="#FFF1C2">BẢNG GIÁ</text>
     <g class="chalk" font-size="16" fill="#F3EEDF">
       ${lines.map(([a, b, c], k) => `<text x="-56" y="${66 + k * 21}" ${c ? `fill="${c}"` : ''}>${a}</text><text x="56" y="${66 + k * 21}" text-anchor="end" ${c ? `fill="${c}"` : ''}>${b}</text>`).join('')}
@@ -763,11 +905,13 @@ function wallSVG(priceLines, o = {}) {
     return `<circle cx="${(Math.sin(a) * 21).toFixed(1)}" cy="${(-Math.cos(a) * 21).toFixed(1)}" r="${i % 3 ? 1.3 : 2.2}" fill="#8A5A3B"/>`;
   }).join('');
   return `
-    <rect width="${VW}" height="${FLOOR_TOP}" fill="#F2DFB4"/><rect y="56" width="${VW}" height="120" fill="url(#gCeil)"/>
-    <path d="M250,96 q34,-9 56,16 q-26,22 -56,-16z M560,210 q24,-5 32,12 q-19,14 -32,-12z" fill="#E7CF9C" opacity=".5"/>
+    <rect width="${VW}" height="${FLOOR_TOP}" fill="url(#gWall)"/><rect y="56" width="${VW}" height="120" fill="url(#gCeil)"/>
+    <path d="M18,62 V${FLOOR_TOP} M742,62 V${FLOOR_TOP}" stroke="#D1B58B" stroke-width="7" opacity=".5"/>
     <rect y="${FLOOR_TOP - 64}" width="${VW}" height="64" fill="url(#pWains)"/><rect y="${FLOOR_TOP - 70}" width="${VW}" height="8" fill="#4E8F80"/>
     <rect y="${FLOOR_TOP}" width="${VW}" height="${VH - FLOOR_TOP}" fill="url(#pFloor)"/><rect y="${FLOOR_TOP}" width="${VW}" height="${VH - FLOOR_TOP}" fill="url(#gFloorShade)"/>
-    <rect y="${FLOOR_TOP - 4}" width="${VW}" height="6" fill="#3F7A6D"/>
+    <rect y="${FLOOR_TOP - 4}" width="${VW}" height="6" fill="#527C6A"/>
+    ${roomPaintingSVG()}
+    ${pendantSVG(708)}
     ${priceBoardSVG(priceLines)}
     <g transform="translate(318 128)"><circle r="31" fill="#8A5A3B"/><circle r="26" fill="#FFF8E6"/>${ticks}
       <line class="clock-h" y1="3" y2="-12" stroke="#3A2A22" stroke-width="4" stroke-linecap="round"/>
@@ -786,7 +930,15 @@ function wallSVG(priceLines, o = {}) {
     </g>
     <g transform="translate(300 ${FLOOR_TOP + 4}) scale(.74)">${dispenserSVG()}</g>`;
 }
-// Mái hiên sọc + biển hiệu neon mang tên quán (chữ tự nhỏ lại khi tên dài)
+// Tranh chỉ là nền; giá, đồng hồ, đồ nâng cấp và mọi vùng bấm vẫn vẽ riêng.
+// SVG phía dưới giữ cảnh dùng được ngay cả khi ảnh không tải được.
+function roomPaintingSVG() {
+  // Mép sàn của tranh v1 ở pixel 550; ghép hai miền vào đúng FLOOR_TOP của cảnh.
+  const image = '<image href="assets/art/room-painted-v1.jpg" width="1326" height="1186" pointer-events="none" aria-hidden="true"/>';
+  return `<svg width="${VW}" height="${FLOOR_TOP}" viewBox="0 0 1326 550" preserveAspectRatio="none" overflow="hidden" pointer-events="none" aria-hidden="true">${image}</svg>
+    <svg y="${FLOOR_TOP}" width="${VW}" height="${VH - FLOOR_TOP}" viewBox="0 550 1326 636" preserveAspectRatio="none" overflow="hidden" pointer-events="none" aria-hidden="true">${image}</svg>`;
+}
+// Mái hiên sọc + biển hiệu gỗ mang tên quán (chữ tự nhỏ lại khi tên dài)
 function awningSVG(name) {
   let d = 'M0,50';
   for (let x = 0; x < VW; x += 30) d += ` A15,11 0 0 0 ${x + 30},50`;
@@ -794,12 +946,21 @@ function awningSVG(name) {
   const size = Math.round(clamp(52 * 14 / Math.max(14, name.length), 24, 52));
   const sign = signSVG().replace('font-size="52"', `font-size="${size}"`)
     .replace('letter-spacing="1"></text>', `letter-spacing="1">${safe}</text>`);
-  return `<rect width="${VW}" height="20" fill="#5B5F63"/><path d="${d} L${VW},18 L0,18 Z" fill="url(#pAwning)"/>
+  return `<rect y="48" width="${VW}" height="12" fill="#604C35" opacity=".13"/><rect width="${VW}" height="20" fill="#5B5F63"/><path d="${d} L${VW},18 L0,18 Z" fill="url(#pAwning)" stroke="#527C6A" stroke-width="1"/>
     <g transform="translate(${VW / 2} 0) scale(.62) translate(-800 0)">${sign}</g>`;
 }
 function frameSVG() {
   return `<rect y="${FRONT}" width="${VW}" height="${VH - FRONT}" fill="#7E8387"/>
     <rect width="12" height="${VH}" fill="#EAD3A3"/><rect x="${VW - 12}" width="12" height="${VH}" fill="#EAD3A3"/>`;
+}
+// Đèn có chụp rõ ràng để ánh vàng ở quầy có nguồn sáng trong phòng.
+function pendantSVG(x) {
+  return `<g transform="translate(${x} 58)" stroke-linejoin="round">
+    <path d="M0,0 V20" stroke="#644D3B" stroke-width="2"/>
+    <path d="M-9,20 H9 L27,38 Q0,45 -27,38 Z" fill="#2B7165" stroke="#365B4E" stroke-width="2"/>
+    <ellipse cy="39" rx="22" ry="4" fill="#FFDE99"/>
+    <path d="M-7,25 H7" stroke="#9ACBB5" stroke-width="2" opacity=".65"/>
+  </g>`;
 }
 // Đèn trong quán (vẽ ở lớp hoà sáng "screen"); game chỉnh độ mạnh từng nhóm bằng opacity
 function lightsSVG(sx) {
@@ -807,28 +968,68 @@ function lightsSVG(sx) {
     `<path d="M${x - 8},${top} L${x + 8},${top} L${x + spread},${bottom} L${x - spread},${bottom} Z" fill="url(#gCone)"/>`;
   return `<path class="lt-sun" d="M120,${FRONT} L${VW - 120},${FRONT} L${VW - 220},${FLOOR_TOP + 60} L220,${FLOOR_TOP + 60} Z" fill="url(#gSun)"/>
     <g class="lt-lamps">${sx.map(x => cone(x, 56, 420, 70)).join('')}</g>
-    <g class="lt-counter"><ellipse cx="640" cy="250" rx="190" ry="125" fill="url(#gWarm)"/><ellipse cx="640" cy="230" rx="90" ry="70" fill="url(#gWarm)"/></g>
-    <ellipse class="lt-sign" cx="${VW / 2}" cy="36" rx="260" ry="60" fill="url(#gTeal)"/>
+    <g class="lt-counter">${cone(708, 98, 350, 100)}<ellipse cx="640" cy="250" rx="125" ry="90" fill="url(#gWarm)" opacity=".3"/></g>
+    <ellipse class="lt-sign" cx="${VW / 2}" cy="36" rx="230" ry="54" fill="url(#gWarm)"/>
     <g class="lt-neon">${neonGameSVG(true)}${fairyLightsSVG(true)}</g>`;
 }
 
 
 // Bảng menu chỉ nhận chữ đã chuẩn bị, không thay đổi dữ liệu quán.
-function morningSVG(name, lines, rates, hot) {
+function morningSVG(name, lines, rates, hot, machines = []) {
   const safe = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const rows = lines.map((l,i) => '<text x="110" y="'+(133+i*27)+'">'+safe(l.name)+'</text><text x="620" y="'+(133+i*27)+'" text-anchor="end">'+safe(l.price)+'</text>').join('');
-  const y = 148+lines.length*27;
-  return scopeSVG('<svg viewBox="0 0 760 490" role="img" aria-label="Menu buổi sáng">'+defsSVG()+
-    '<rect width="760" height="490" fill="#F2DFB4"/><rect y="383" width="760" height="107" fill="#E9CE9C"/><path d="M0 381H760 M0 435H760" stroke="#4E8F80" stroke-width="6"/>'+awningSVG(name)+
-    '<rect x="80" y="65" width="570" height="'+(y-10)+'" rx="10" fill="#A86F45"/><rect x="93" y="78" width="544" height="'+(y-36)+'" rx="3" fill="#354C43"/><g fill="#FFF6E3" font-family="Patrick Hand,cursive" font-size="23"><text x="365" y="108" text-anchor="middle" font-size="29">✦ Menu hôm nay ✦</text>'+rows+
-    '<text x="110" y="'+(y+2)+'" font-size="17" fill="#B3E1CE">'+safe(rates)+'</text><text x="110" y="'+(y+27)+'" font-size="19" fill="#FFC08F">HOT hôm nay: '+safe(hot)+'</text></g>'+
-    '<g data-hit="host" role="button" tabindex="0" aria-label="Mở máy tính chủ" class="host-monitor"><title>Máy tính chủ · bấm để mở các app</title><rect x="520" y="387" width="110" height="82" rx="8" fill="#FFFDF4"/><rect x="534" y="394" width="82" height="49" rx="4" fill="#2D2F36"/><rect x="540" y="400" width="70" height="36" rx="2" fill="#1FA89A"/><text x="575" y="424" text-anchor="middle" font-size="19" fill="#FFFDF4">APP</text><text x="575" y="462" text-anchor="middle" font-size="17" fill="#3A2A22">Máy chủ</text></g>'+
-    '<g transform="translate(690 456) scale(.6)">'+standingSVG(OWNER_LOOK,{owner:true,mood:'smile'})+'<path d="M-28,-110 L-70,0" stroke="#A86F45" stroke-width="6"/><path d="M-70,-10 l-18,22 h34z" fill="#D9A73D"/></g><g transform="translate(52 468) scale(.65)">'+dogSVG(true)+'</g></svg>', 'pr-');
+  const rows = lines.map((l, i) => `<text x="34" y="${155 + i * 29}">${safe(l.name)}</text><text x="243" y="${155 + i * 29}" text-anchor="end">${safe(l.price)}</text>`).join('');
+  const menuHeight = 67 + lines.length * 29;
+  const rateParts = rates.split(' · ');
+  const rateLines = [rateParts.slice(0, 2).join(' · '), rateParts.slice(2).join(' · ')].filter(Boolean);
+  const room = machines.slice(0, 3).map((m, i) => `<g transform="translate(${140 + i * 240} 658)">${stationSVG({ m, i })}</g>`).join('');
+  return scopeSVG(`<svg viewBox="0 0 760 780" role="img" aria-label="Quán và menu buổi sáng">${defsSVG()}${wallSVG([])}
+    <g transform="translate(630 305) scale(.82)">${standingSVG(OWNER_LOOK, { owner: true, mood: 'smile' })}</g>
+    <g transform="translate(-316 -19) scale(.75)">${counterSVG(false)}</g>${room}
+    <g transform="translate(58 665) scale(.62)">${dogSVG(false)}</g>
+    <rect x="16" y="89" width="250" height="${menuHeight}" rx="7" fill="url(#gWood)" stroke="#735139" stroke-width="2"/>
+    <rect x="24" y="97" width="234" height="${menuHeight - 16}" rx="4" fill="#2F4E43" stroke="#D3AF77"/>
+    <g fill="#FFF6E3" class="marker" font-size="24"><text x="141" y="126" text-anchor="middle" font-size="28">Menu hôm nay</text>${rows}</g>
+    <rect x="290" y="170" width="275" height="91" rx="5" fill="#FFF5DA" stroke="#D1B58B" stroke-width="1.5"/>
+    <g fill="#305F50" class="marker" font-size="18">
+      ${rateLines.map((line, i) => `<text x="304" y="${196 + i * 24}">${safe(line)}</text>`).join('')}
+      <text x="304" y="245" font-size="18">HOT: ${safe(hot)}</text>
+    </g>${awningSVG(name)}${frameSVG()}
+    <g data-hit="host" role="button" tabindex="0" aria-label="Mở máy tính chủ" class="host-monitor">
+      <title>Máy tính chủ · bấm để mở các app</title>
+      <rect x="12" y="680" width="736" height="100" rx="12" fill="#FFF9E8" stroke="#B7C9B4" stroke-width="2"/>
+      <rect x="39" y="711" width="55" height="36" rx="4" fill="#3C4944"/><rect x="45" y="716" width="43" height="24" rx="2" fill="#238D80"/>
+      <path d="M66,747 V753 M54,755 H78" stroke="#3C4944" stroke-width="3"/>
+      <text x="119" y="742" font-size="30" font-weight="800" fill="#235D51">Máy chủ</text>
+      <text x="308" y="740" font-size="22" fill="#79644F">Các app quản lý quán</text>
+      <path d="M702,720 L713,730 L702,740" fill="none" stroke="#238D80" stroke-width="3" stroke-linecap="round"/>
+    </g>
+    </svg>`, 'pr-');
 }
 function itemSVG(k) {
-  const colors = {mi:'#F07A5A',sting:'#D84532',coca:'#C99831',suoi:'#96D8EF',caphe:'#A86F45'};
-  let shape = k==='trung' ? '<ellipse cx="18" cy="29" rx="11" ry="16" fill="#FFFDF4"/><ellipse cx="34" cy="34" rx="11" ry="16" fill="#F8E6C9"/>' : k==='xucxich' ? '<rect x="16" y="8" width="20" height="46" rx="10" fill="#D77853"/><path d="M18 22l16-5m-16 18l16-5" stroke="#F2B691" stroke-width="3"/>' : '<rect x="10" y="12" width="32" height="42" rx="6" fill="'+(colors[k]||'#A86F45')+'"/><rect x="10" y="26" width="32" height="16" fill="#FFF6E3"/><text x="26" y="38" font-size="11" text-anchor="middle" fill="#3A2A22">'+(k==='mi'?'MÌ':k==='suoi'?'NƯỚC':k==='caphe'?'CÀ PHÊ':'NET')+'</text><rect x="16" y="6" width="20" height="7" rx="3" fill="#C2B7A2"/>';
-  return '<svg viewBox="0 0 52 64" aria-hidden="true">'+shape+'</svg>';
+  let shape;
+  switch (k) {
+    case 'mi':
+      shape = `<path d="M7,7 L12,9 L17,7 L22,9 L27,7 L32,9 L37,7 L44,9 V57 L39,55 L34,57 L29,55 L24,57 L19,55 L14,57 L7,55 Z" fill="#D97956"/>
+        <path d="M8,18 H43 V48 H8 Z" fill="#FFF0D1" stroke="none"/><text x="26" y="31" text-anchor="middle" font-size="13" font-weight="800" fill="#694735" stroke="none">MÌ</text>
+        <g transform="translate(26 40) scale(.65)" stroke="none">${bowlSVG()}</g><path d="M12,12 H39 M12,52 H39" stroke="#F1B18B"/>`;
+      break;
+    case 'trung':
+      shape = '<ellipse cx="18" cy="29" rx="11" ry="16" fill="#FFFAEC"/><ellipse cx="34" cy="35" rx="11" ry="16" fill="#EAD2AD"/><path d="M14,20 Q10,25 12,31 M30,26 Q27,30 28,35" stroke="#FFFFFF" stroke-width="3" fill="none"/>';
+      break;
+    case 'xucxich':
+      shape = '<path d="M18,11 L15,5 H36 L33,11 M18,52 L15,59 H36 L33,52" fill="#F1D6B2"/><rect x="16" y="9" width="20" height="46" rx="10" fill="#C97654"/><path d="M20,20 L32,16 M20,33 L32,29 M20,46 L32,42" stroke="#EFBC91" stroke-width="3"/>';
+      break;
+    case 'suoi':
+      shape = '<path d="M20,13 V19 L14,27 V53 Q26,59 38,53 V27 L32,19 V13 Z" fill="#CAE7E2"/><rect x="19" y="7" width="14" height="8" rx="2" fill="#689C9C"/><rect x="14" y="32" width="24" height="14" fill="#FFF6E3" stroke="none"/><path d="M26,34 Q19,41 26,43 Q33,41 26,34 Z" fill="#509D9E" stroke="none"/><path d="M18,26 V30 M18,48 V51" stroke="#FFFFFF" stroke-width="3"/>';
+      break;
+    case 'caphe':
+      shape = '<path d="M12,20 H40 L36,55 H16 Z" fill="#BC8A5D"/><rect x="10" y="15" width="32" height="7" rx="3" fill="#F4E8D0"/><path d="M15,32 H37 L35,45 H17 Z" fill="#FFF0D1" stroke="none"/><ellipse cx="26" cy="39" rx="5" ry="7" fill="#785039" stroke="none" transform="rotate(25 26 39)"/>';
+      break;
+    default:
+      shape = `<rect x="12" y="10" width="28" height="45" rx="7" fill="${k === 'sting' ? '#C76351' : '#C59B4E'}"/><rect x="12" y="25" width="28" height="18" fill="#FFF0D1" stroke="none"/>
+        <text x="26" y="38" text-anchor="middle" font-size="10" font-weight="800" fill="#694735" stroke="none">NET</text><ellipse cx="26" cy="11" rx="13" ry="3" fill="#D7D7C8"/><path d="M18,17 V23" stroke="#FFFFFF" stroke-width="2" opacity=".5"/>`;
+  }
+  return `<svg viewBox="0 0 52 64" aria-hidden="true"><ellipse cx="26" cy="59" rx="18" ry="3" fill="#604B35" opacity=".12"/><g stroke="#896B50" stroke-width="1.5" stroke-linejoin="round">${shape}</g></svg>`;
 }
 
 // Cảnh chào đầu game, chỉ dùng cấu hình minh họa.
@@ -837,14 +1038,24 @@ function scopeSVG(svg, prefix) {
   return svg.replace(/id="([^"]+)"/g, (_,id) => 'id="'+prefix+id+'"').replace(/url\(#([^)]+)\)/g,(_,id) => 'url(#'+prefix+id+')');
 }
 function previewSVG(m, i, prefix) {
-  return scopeSVG('<svg viewBox="-140 -270 280 290" aria-hidden="true">'+defsSVG()+stationSVG({m,i})+'</svg>',prefix);
+  return scopeSVG('<svg viewBox="-140 -305 280 325" aria-hidden="true">'+defsSVG()+stationSVG({m,i})+'</svg>',prefix);
 }
 function titleSVG(prices) {
   const m = {cpu:1,gpu:1,chair:1,mon:1,kb:1,mouse:1};
+  // Nhân vật ở màn chào cố định, không lấy số ngẫu nhiên của luật chơi.
+  const guests = [
+    { ...OWNER_LOOK, style: 'uniform', apron: false, towel: false, shirt: '#F8F3E9', trim: '#617C85', scarf: true, pants: '#465566' },
+    { ...OWNER_LOOK, style: 'hoodie', apron: false, towel: false, shirt: '#568E83', trim: '#3C6B60', hairStyle: 'bob', headset: true, accent: '#F0C875' },
+    { ...OWNER_LOOK, style: 'jersey', apron: false, towel: false, shirt: '#D57856', trim: '#F5D9AE', hairStyle: 'spiky', headset: true, accent: '#238D80', number: '07' },
+  ];
   return scopeSVG('<svg viewBox="0 0 760 680" role="img" aria-label="Quán nhỏ có máy tính, quầy mì và Cậu Vàng">'+defsSVG()+wallSVG(prices)+
-    '<g transform="translate(630 305) scale(.82)">'+standingSVG(OWNER_LOOK,{owner:true,mood:'smile'})+'</g><g transform="translate(-316 -19) scale(.75)">'+counterSVG()+'</g>'+
-    [140,380,620].map((x,i)=>'<g transform="translate('+x+' 658)">'+stationSVG({m:{...m,cpu:i,gpu:i,mon:i,chair:i},i})+'</g>').join('')+
-    '<g transform="translate(60 667) scale(.62)">'+dogSVG(true)+'</g>'+awningSVG('Quán Nét Bất Ổn')+'</svg>', 'tt-');
+    '<g transform="translate(630 305) scale(.82)">'+standingSVG(OWNER_LOOK,{owner:true,mood:'smile'})+'</g><g transform="translate(-316 -19) scale(.75)">'+counterSVG(false)+'</g>'+
+    '<g transform="translate(410 370) scale(.72)">'+standingSVG({...guests[0],bag:true,hairStyle:'side'},{mood:'happy',carry:'bowl'})+'</g>'+
+    [140,380,620].map((x,i)=>'<g transform="translate('+x+' 658)">'+stationSVG({m:{...m,cpu:i,gpu:i,mon:i,chair:i},i,cust:{look:guests[i],pose:i===0?'eat':'play'},item:i===0?'bowl':i===1?'cup':null})+'</g>').join('')+
+    '<g transform="translate(60 667) scale(.62)">'+dogSVG(true)+'</g>'+titlePaintingSVG(prices)+awningSVG('Quán Nét Bất Ổn')+'</svg>', 'tt-');
+}
+function titlePaintingSVG(prices) {
+  return `<image href="assets/art/title-painted-v1.jpg" width="${VW}" height="${VH}" preserveAspectRatio="none" pointer-events="none" aria-hidden="true"/>${priceBoardSVG(prices)}`;
 }
 window.ART = {
   titleSVG, previewSVG,

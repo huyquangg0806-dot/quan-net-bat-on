@@ -158,9 +158,10 @@
   function svg(card) {
     card = CARD_CATALOG.find(c => c.id === card?.id);
     if (!card) return '';
-    // Màu phẳng giúp tranh máy tính đứng độc lập, không phụ thuộc ID màu trong cảnh quán.
+    // Thẻ đứng độc lập; các vật liệu mới của quán cũng phải có màu dự phòng tại đây.
+    const materials = { gRainbow: teal, pMesh: cream, gOak: '#D6A875', gPlastic: '#DAD0B6', gLeather: '#3B4D52', gBlueSeat: '#528FA8', gGlass: '#263B43', gMetal: '#BCCDC5', gCeramic: '#FFF4DC' };
     const drawing = (card.set === 'huyen-bi' ? mystic(card.art) : cafe(card.art))
-      .replace(/url\(#gRainbow\)/g, teal).replace(/url\(#pMesh\)/g, cream);
+      .replace(/url\(#([^)]+)\)/g, (match, id) => materials[id] || match);
     return `<svg viewBox="0 0 240 240" role="img" aria-label="${esc(card.name)}" xmlns="http://www.w3.org/2000/svg">${drawing}</svg>`;
   }
   window.CardArt = { svg };

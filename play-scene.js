@@ -211,7 +211,7 @@ function start({ shopName, prices, staffCount = 0, hot = '', hotName = '', decor
     <g data-gamble-sign="" display="none" transform="translate(1194 412)"><rect width="224" height="36" rx="3" fill="#FFFDF4" stroke="#A83226" stroke-width="3"/><text x="112" y="25" text-anchor="middle" font-size="22" font-weight="bold" fill="#A83226">CẤM CỜ BẠC</text></g></g>`;
   Lr.front.innerHTML = `<g class="dog-spot" data-hit="dog"></g>` + A.frameSVG() + A.awningSVG(shopName);
   Lr.night.innerHTML = `<rect class="ov-dusk" width="${A.VW}" height="${A.VH}" fill="#FFA464" opacity="0"/>
-    <rect class="ov-night" width="${A.VW}" height="${A.VH}" fill="#20234F" opacity="0"/>
+    <rect class="ov-night" width="${A.VW}" height="${A.VH}" fill="#244454" opacity="0"/>
     <rect class="ov-vig" width="${A.VW}" height="${A.VH}" fill="url(#gVig)" opacity="0"/>
     <rect class="ov-dark" width="${A.VW}" height="${A.VH}" fill="#1B1426" opacity="0"/>`;
   Lr.light.innerHTML = A.lightsSVG(SX) + `<g class="lt-tv">${TV.glowSVG(hot)}</g><g class="lt-glows"></g>`;
@@ -572,16 +572,16 @@ function applyLight(t) {
   const n = smooth(16.4, 19.2, t) * (1 - dawn);
   const dusk = clamp(1 - Math.abs(t - 17.6) / 1.5, 0, 1);
   const set = (sel, val) => { const e = svg.querySelector(sel); if (e) e.setAttribute('opacity', val.toFixed(3)); };
-  // đêm: quán chìm vào xanh tím, tối dần ra mép khung; khu máy chỉ còn ánh màn hình, quầy vẫn vàng ấm
-  set('.ov-night', n * .8);
-  set('.ov-vig', n * .7);
+  // Đêm xanh trầm nhưng vẫn thấy mặt khách và máy; quầy giữ ánh đèn vàng.
+  set('.ov-night', n * .62);
+  set('.ov-vig', n * .32);
   set('.ov-dusk', dusk * .3 * (1 - n * .5));
   set('.lt-lamps', Math.max(.05, smooth(16.8, 18, t) * .18));
-  set('.lt-counter', Math.max(.1, smooth(16.8, 18.2, t) * .95));
+  set('.lt-counter', Math.max(.1, smooth(16.8, 18.2, t) * .72));
   set('.lt-sun', (1 - n) * .5 * smooth(7, 9, t));
-  set('.lt-sign', .25 + n * .75);
-  set('.lt-glows', .12 + n * .88);
-  set('.lt-neon', smooth(17.2, 19, t));   // đèn nháy + biển GAME bật lúc chập tối
+  set('.lt-sign', .12 + n * .4);
+  set('.lt-glows', .08 + n * .62);
+  set('.lt-neon', smooth(17.2, 19, t) * .55);   // Đèn trang trí nhẹ hơn thông báo thao tác.
   set('.lt-tv', .1 + n * .6);             // TV hắt sáng ra quán, rõ nhất về đêm
   const hh = svg.querySelector('.clock-h'), mm = svg.querySelector('.clock-m');
   if (hh) hh.setAttribute('transform', `rotate(${((t % 12) * 30).toFixed(1)})`);

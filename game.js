@@ -1763,7 +1763,7 @@ function renderMachines() {
         <button class="btn small ghost" data-fix="${i}" ${S.money < C.FIX_CHEAP ? 'disabled' : ''}>🔧 Sửa tạm · ${money(C.FIX_CHEAP)}</button>
         <button class="btn small ghost" data-replace="${i}" ${S.money < replaceCost(m) ? 'disabled' : ''}>🆕 Thay mới · ${money(replaceCost(m))}</button></div>`;
     return `<div class="mc-row" data-mc="${i}">
-      <div class="si">${TIERS[t].icon}</div>
+      <div class="si mc-picture">${ART.previewSVG(m,i,'mc-'+i+'-')}</div>
       <div><b>Máy ${i + 1}</b> <span class="chip t${t}">${TIERS[t].short}</span>
         <span class="muted small">${money(machineRate(m))}/giờ</span> ${wearChip(m)}
         <div class="mc-parts">${parts}</div>${fix}${m.missing ? `<div class="mc-fix">
@@ -1822,7 +1822,7 @@ function machinePreview(i) {
 function renderMorning() {
   const lines = Object.keys(ITEMS).filter(k => S.unlocked[k]).map(k => ({name:ITEMS[k].name,price:money(ITEMS[k].price)}));
   const rates = Object.values(TIERS).map(t => t.short+' '+money(t.rate)).join(' · ')+' /giờ';
-  $('#prep-scene').innerHTML = ART.morningSVG(S.shopName,lines,rates,GAMES[S.hot].name);
+  $('#prep-scene').innerHTML = ART.morningSVG(S.shopName,lines,rates,GAMES[S.hot].name,S.machines);
 }
 function openMachine(i) {
   const body = el('div', 'machine-edit');
@@ -3205,7 +3205,7 @@ function stockBtn(k, label, disabled) {
   const n = invCount(k), bad = expiredCount(k);
   // lấy hàng cũ trước: nếu còn hàng hết date thì món tiếp theo là đồ hết date
   return `<button class="stock-btn ${bad ? 'next-expired' : ''}" data-add="${k}" ${disabled || !n ? 'disabled' : ''}>
-    <span class="si">${ITEMS[k].icon}</span>${label || ITEMS[k].name}<small>${n ? 'còn ' + n : 'hết hàng'}</small>
+    <span class="si">${ART.itemSVG(k)}</span>${label || ITEMS[k].name}<small>${n ? 'còn ' + n : 'hết hàng'}</small>
     ${bad ? `<small class="bad-text">☠️ ${bad} hết date</small>` : ''}</button>`;
 }
 
@@ -3235,12 +3235,17 @@ function potSVG(t, cooking) {
   const steam = has && v > 15 ? `<g class="steam ${cooking ? 'strong' : ''}" transform="translate(60 26)" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" opacity=".9">
     <path d="M-16,0 q-7,-9 0,-18 q7,-9 0,-18"/><path d="M0,0 q-7,-9 0,-18 q7,-9 0,-18"/><path d="M16,0 q-7,-9 0,-18 q7,-9 0,-18"/></g>` : '';
   return `<svg viewBox="0 -10 120 106" aria-hidden="true">
-    <rect x="8" y="86" width="104" height="10" rx="3" fill="#5B5F63"/>
+    <defs><linearGradient id="k-pot-metal"><stop stop-color="#849B9D"/><stop offset=".3" stop-color="#DCE6DE"/><stop offset=".6" stop-color="#BACDCA"/><stop offset="1" stop-color="#799194"/></linearGradient></defs>
+    <ellipse cx="60" cy="91" rx="53" ry="5" fill="#544936" opacity=".14"/>
+    <rect x="8" y="86" width="104" height="10" rx="3" fill="#3C5156" stroke="#223C42" stroke-width="1.5"/>
+    <path d="M15,89 H100" stroke="#88A69F" stroke-width="1.3"/>
     ${cooking ? '<g class="flame-on"><path d="M30,86 q5,-16 10,0 z M55,86 q5,-19 10,0 z M80,86 q5,-16 10,0 z" fill="#4AA8FF"/></g>' : ''}
-    <rect x="16" y="36" width="88" height="40" rx="9" fill="#B9C0C4"/>
-    <rect x="4" y="46" width="14" height="7" rx="3.5" fill="#8E969A"/><rect x="102" y="46" width="14" height="7" rx="3.5" fill="#8E969A"/>
-    <ellipse cx="60" cy="38" rx="44" ry="10" fill="${broth}"/>${top}
-    <path d="M26,60 H94" stroke="#fff" stroke-width="3" opacity=".35"/>${steam}</svg>`;
+    <rect x="16" y="36" width="88" height="42" rx="10" fill="url(#k-pot-metal)" stroke="#547174" stroke-width="1.7"/>
+    <path d="M20,65 Q60,76 100,65 V73 Q60,85 20,73 Z" fill="#668C8E" opacity=".35"/>
+    <rect x="4" y="46" width="14" height="7" rx="3.5" fill="#405D62"/><rect x="102" y="46" width="14" height="7" rx="3.5" fill="#405D62"/>
+    <ellipse cx="60" cy="38" rx="44" ry="10" fill="#EAF0E2" stroke="#547174" stroke-width="1.5"/>
+    <ellipse cx="60" cy="38" rx="40" ry="8" fill="${broth}"/>${top}
+    <path d="M27,49 V65 M33,52 V68" stroke="#FAFFF1" stroke-width="2.5" opacity=".7" stroke-linecap="round"/>${steam}</svg>`;
 }
 
 function openKitchen(pc) {
