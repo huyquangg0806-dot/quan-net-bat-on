@@ -43,7 +43,7 @@ function clockText(t) {
 }
 const mood = s => s >= 85 ? '😍' : s >= 65 ? '🙂' : s >= 40 ? '😐' : '😡';
 const keysOf = cat => Object.keys(ITEMS).filter(k => ITEMS[k].cat === cat && S.unlocked[k]);
-const patienceMul = () => R && acRunning() ? C.AC_PATIENCE_BONUS : 1;
+const patienceMul = () => (R && acRunning() ? C.AC_PATIENCE_BONUS : 1) * (1 + cardFx('patience'));
 const rentCost = () => C.RENT_BASE + C.RENT_PER_PC * S.machines.length;
 const netPlan = () => NET_PLANS.find(p => p.id === S.net) || NET_PLANS[0];
 const netCap = () => S.netCut ? 0 : netPlan().cap;   // nợ cước bị cắt mạng: máy nào chạy cũng giật
@@ -188,6 +188,7 @@ function normalizeSave() {
   normalizeAccounts();
   normalizeHost();
   normalizeCards();
+  normalizeQuests();
 }
 
 // ---------- Thẻ sưu tầm: kho, thị trường và giao dịch ----------
@@ -206,9 +207,10 @@ const cardHash = text => [...String(text)].reduce((n, ch) => Math.imul(n ^ ch.ch
 const cardNews = (day = S.day) => CARD_MARKET_NEWS[(day - 1) % CARD_MARKET_NEWS.length];
 const cardRoundPrice = price => Math.max(C.CARD_PRICE_STEP, Math.round(price / C.CARD_PRICE_STEP) * C.CARD_PRICE_STEP);
 const cardMarketTick = () => Math.floor(Date.now() / C.CARD_MARKET_INTERVAL_MS);
-function cardMarketFactor(setId, key, day = S.day, tick = cardMarketTick(), rarity = null) {
+function cardMarketFactor(setId, key, day = S.day, tick = cardMarketTick(), rarity = null, fx = null) {
   const news = cardNews(day);
-  const applies = (!news.set || news.set === setId) && (!news.rarities || news.rarities.includes(rarity));
+  const applies = (!news.set || news.set === setId) && (!news.rarities || news.rarities.includes(rarity))
+    && (!news.fx || [].concat(news.fx).includes(fx));
   // Hai sóng nhỏ giữ giá thay đổi từ từ; cùng nhịp/cùng bản lưu không quay giá lại.
   const phase = cardHash(setId + ':' + key) * Math.PI * 2;
   const variation = 1 + C.CARD_MARKET_VARIANCE * (Math.sin(tick / C.CARD_MARKET_SLOW_TICKS + phase) * C.CARD_MARKET_SLOW_WEIGHT
@@ -218,7 +220,7 @@ function cardMarketFactor(setId, key, day = S.day, tick = cardMarketTick(), rari
 function cardPrice(id, day = S.day, tick = cardMarketTick()) {
   const card = cardById(id);
   if (!card) return 0;
-  return cardRoundPrice(C.CARD_BASE_PRICES[id] * cardMarketFactor(card.set, id, day, tick, card.rarity));
+  return cardRoundPrice(C.CARD_BASE_PRICES[id] * cardMarketFactor(card.set, id, day, tick, card.rarity, card.fx));
 }
 function normalizeCards() {
   const raw = S.cards && typeof S.cards === 'object' ? S.cards : {};
@@ -226,14 +228,25 @@ function normalizeCards() {
   const lots = arr => (Array.isArray(arr) ? arr : []).filter(l => l && Number.isSafeInteger(l.qty) && l.qty > 0 && Number.isSafeInteger(l.cost) && l.cost >= 0)
     .map(l => ({ qty: Math.min(l.qty, C.CARD_COUNT_MAX), cost: l.cost }));
   S.cards = { enabled: raw.enabled === true, packs: {}, owned: {}, nextOpen: Math.max(1, integer(raw.nextOpen)), opening: null, daily: null };
+  // số mốc sưu tầm đã nhận của từng bộ
+  S.cards.milestones = Object.fromEntries(CARD_SETS.map(s => [s.id, Math.min(integer(raw.milestones?.[s.id]), C.CARD_MILESTONES.length)]));
   for (const key of cardKeys()) S.cards.packs[key] = lots(raw.packs?.[key]);
   for (const card of CARD_CATALOG) S.cards.owned[card.id] = lots(raw.owned?.[card.id]);
+  // Sau khi có kho thẻ: kệ trưng bày (mã thẻ hoặc null mỗi ô) và bụi thẻ. Bản cũ: kệ trống, bụi 0.
+  S.cards.dust = integer(raw.dust);
+  S.cards.shelf = Array.from({ length: shelfSlots() }, (_, i) => {
+    const id = Array.isArray(raw.shelf) ? raw.shelf[i] : null;
+    return cardById(id) && cardCount(S.cards.owned[id]) && raw.shelf.indexOf(id) === i ? id : null;
+  });
   S.cards.enabled ||= cardKeys().some(k => cardCount(S.cards.packs[k])) || CARD_CATALOG.some(c => cardCount(S.cards.owned[c.id]));
   const pending = raw.opening;
   if (pending && Number.isSafeInteger(pending.id) && pending.id > 0 && cardPackInfo(pending.key)
     && Array.isArray(pending.ids) && [C.CARD_PACK_SIZE, C.CARD_LEGACY_PACK_SIZE].includes(pending.ids.length)
     && pending.ids.every(id => cardById(id)?.set === cardPackInfo(pending.key).set.id)) {
     S.cards.opening = { id: pending.id, key: pending.key, ids: pending.ids.slice() };
+    // gói mở từ bản cũ chưa có hai trường này: chỉ không hiện nhãn MỚI và lời/lỗ
+    if (Array.isArray(pending.fresh) && pending.fresh.length === pending.ids.length) S.cards.opening.fresh = pending.fresh.map(x => x === true);
+    if (Number.isSafeInteger(pending.cost) && pending.cost >= 0) S.cards.opening.cost = pending.cost;
     S.cards.nextOpen = Math.max(S.cards.nextOpen, pending.id + 1);
   }
   const old = raw.daily?.day === S.day ? raw.daily : {};
@@ -249,6 +262,48 @@ function normalizeCards() {
       name: offer.name.slice(0, 80), gender: offer.gender === 'f' ? 'f' : 'm', status: offer.status, look: offer.look });
     if (daily.offers.length >= C.CARD_DAILY_BUYERS) break;
   }
+}
+// ---------- Kệ trưng bày, tác dụng và bụi thẻ ----------
+const shelfSlots = () => C.CARD_SHELF_SLOTS + (S.upgrades.shelf ? C.CARD_SHELF_EXTRA : 0);
+// Bản còn bán/phân rã được: lá đang trên kệ giữ lại một bản
+const cardFree = id => Math.max(0, cardCount(S.cards.owned[id]) - (S.cards.shelf.includes(id) ? 1 : 0));
+const fxPower = card => C.CARD_FX_POWER[card.rarity];
+// Tổng tác dụng một loại từ các lá trên kệ (0–CARD_FX_CAP%), dạng tỉ lệ 0–1
+function cardFx(type) {
+  if (!S?.cards?.shelf) return 0;
+  const total = S.cards.shelf.reduce((n, id) => { const c = id && cardById(id); return c && c.fx === type ? n + fxPower(c) : n; }, 0);
+  return Math.min(total, C.CARD_FX_CAP) / 100;
+}
+const cardFxText = card => CARD_FX[card.fx].text.replace('{v}', fxPower(card));
+// Đặt (id) hoặc gỡ (null) thẻ ở một ô kệ, chỉ buổi sáng
+function setShelf(slot, id) {
+  normalizeCards();
+  if (hostPlaying() || !Number.isInteger(slot) || slot < 0 || slot >= S.cards.shelf.length) return false;
+  if (id !== null && (!cardById(id) || !cardCount(S.cards.owned[id]) || S.cards.shelf.some((x, i) => x === id && i !== slot))) return false;
+  return cardTransaction(() => { S.cards.shelf[slot] = id; });
+}
+const cardCraftCost = card => C.CARD_DUST[card.rarity] * C.CARD_CRAFT_MUL;
+// Phân rã một bản rảnh ra bụi; giá vốn bản đó ghi vào chi phí. Trả về số bụi nhận (0 nếu không được).
+function disenchantCard(id) {
+  normalizeCards();
+  const card = cardById(id);
+  if (hostPlaying() || !card || !cardFree(id)) return 0;
+  const ok = cardTransaction(() => {
+    recordBook('materials', takeCardLot(S.cards.owned[id]));
+    S.cards.dust += C.CARD_DUST[card.rarity];
+  });
+  return ok ? C.CARD_DUST[card.rarity] : 0;
+}
+// Dùng bụi chế một bản lá bất kỳ (thường để lấp ô còn thiếu); bản chế có giá vốn 0
+function craftCard(id) {
+  normalizeCards();
+  const card = cardById(id);
+  if (hostPlaying() || !card || S.cards.dust < cardCraftCost(card)) return false;
+  return cardTransaction(() => {
+    S.cards.dust -= cardCraftCost(card);
+    S.cards.owned[id].push({ qty: 1, cost: 0 });
+    S.cards.enabled = true;
+  });
 }
 function cardRarity(packId, roll) {
   if (!C.CARD_PACK_PRICES[packId] || !Number.isFinite(roll) || roll < 0 || roll >= 1) return null;
@@ -312,9 +367,13 @@ function openCardPack(key, previousId = null) {
   const ok = cardTransaction(() => {
     const cost = takeCardLot(S.cards.packs[key]), ids = drawCardPack(key);
     if (ids.length !== C.CARD_PACK_SIZE) throw new Error(CARD_SHOP_COPY.failed);
+    // Xếp hiếm dần để lá hiếm nhất luôn lật cuối; chỉ đổi thứ tự hiện, không bốc lại.
+    const rank = id => CARD_RARITIES.findIndex(r => r.id === cardById(id).rarity);
+    ids.sort((a, b) => rank(a) - rank(b));
+    const fresh = ids.map((id, i) => !cardCount(S.cards.owned[id]) && ids.indexOf(id) === i);
     // Chia hết giá vốn của gói cho các bản thẻ; bản trùng vẫn là hai món hàng.
     ids.forEach((id, i) => S.cards.owned[id].push({ qty: 1, cost: i === ids.length - 1 ? cost - Math.floor(cost / ids.length) * (ids.length - 1) : Math.floor(cost / ids.length) }));
-    result = S.cards.opening = { id: S.cards.nextOpen++, key, ids };
+    result = S.cards.opening = { id: S.cards.nextOpen++, key, ids, fresh, cost };
     S.cards.daily.opened++;
   });
   return ok ? result : false;
@@ -334,6 +393,7 @@ function cardShopView() {
     costs: Object.fromEntries(CARD_CATALOG.map(c => [c.id, S.cards.owned[c.id][0]?.cost || 0])),
     prices: Object.fromEntries(CARD_CATALOG.map(c => [c.id, cardPrice(c.id, S.day, tick)])),
     previous: Object.fromEntries(CARD_CATALOG.map(c => [c.id, cardPrice(c.id, S.day, tick - 1)])),
+    shelf: S.cards.shelf.slice(), dust: S.cards.dust, fx: Object.fromEntries(Object.keys(CARD_FX).map(k => [k, Math.round(cardFx(k) * 100)])),
     opening: S.cards.opening, offers: S.cards.daily.offers.filter(o => o.status === 'waiting' && R?.queue.some(c => c.cardBuyer === o.id)) };
 }
 function cardMarketHTML() {
@@ -365,7 +425,7 @@ function spawnCardBuyer() {
   if (!offer) {
     if (offers.length >= C.CARD_DAILY_BUYERS) return false;
     const available = cardKeys().filter(k => cardCount(S.cards.packs[k]));
-    const owned = CARD_CATALOG.filter(c => c.rarity !== 'basic' && cardCount(S.cards.owned[c.id]));
+    const owned = CARD_CATALOG.filter(c => c.rarity !== 'basic' && cardFree(c.id));
     if (!available.length && !owned.length) return false;
     const index = offers.length, visitor = CARD_VISITORS[index % CARD_VISITORS.length];
     const seed = S.day + ':' + index, kind = index % 2 === 0 ? 'pack' : 'card';
@@ -374,7 +434,8 @@ function spawnCardBuyer() {
       const pool = available.length ? available : cardKeys();
       offer.key = pool[Math.floor(cardHash(seed) * pool.length)]; offer.price = cardPackInfo(offer.key).sell;
     } else {
-      const pool = owned.length ? owned : CARD_CATALOG.filter(c => c.rarity !== 'basic');
+      const wanted = [].concat(cardNews().fx || []), hot = owned.filter(c => wanted.includes(c.fx));
+      const pool = hot.length && cardHash(seed + ':fx') < C.CARD_FX_DEMAND ? hot : owned.length ? owned : CARD_CATALOG.filter(c => c.rarity !== 'basic');
       offer.cardId = pool[Math.floor(cardHash(seed) * pool.length)].id;
       offer.price = cardRoundPrice(cardPrice(offer.cardId) * (C.CARD_OFFER_MIN + cardHash(seed + ':gia') * (C.CARD_OFFER_MAX - C.CARD_OFFER_MIN)));
     }
@@ -395,7 +456,7 @@ function sellToCardBuyer(c) {
   const offer = S.cards.daily.offers.find(o => o.id === c?.cardBuyer);
   if (!hostPlaying() || !R.queue.includes(c) || offer?.status !== 'waiting') return false;
   const lots = offer.kind === 'pack' ? S.cards.packs[offer.key] : S.cards.owned[offer.cardId];
-  if (!cardCount(lots)) return false;
+  if (offer.kind === 'pack' ? !cardCount(lots) : !cardFree(offer.cardId)) return false;
   const ok = cardTransaction(() => {
     const cost = takeCardLot(lots);
     S.money += offer.price; recordBook('revenue', offer.price); recordBook('materials', cost);
@@ -473,7 +534,7 @@ function normalizeHost() {
     && r.dice.every(d => Number.isInteger(d) && d >= 1 && d <= C.HOST_DICE_SIDES)).slice(-C.HOST_DICE_HISTORY);
   for (const r of S.casino.rounds) {
     r.total = r.dice.reduce((n, d) => n + d, 0);
-    r.won = r.side === (r.total <= C.HOST_DICE_SPLIT ? 'tai' : 'xiu');
+    r.won = diceWon(r.side, r.dice);
     r.payout = r.won ? r.bet * C.HOST_DICE_PAYOUT : 0;
   }
   const casino = S.casino;
@@ -490,6 +551,9 @@ function normalizeHost() {
   if (!Number.isFinite(g.peak) || g.peak < 0) g.peak = Math.max(0, S.money);
   if (g.lastCase && (!Number.isFinite(g.lastCase.fine) || g.lastCase.fine < 0 || !Number.isSafeInteger(g.lastCase.day))) g.lastCase = null;
 }
+// Bộ ba (ba mặt giống nhau) là phần nhà cái ăn: cửa nào cũng thua.
+const diceTriple = dice => C.HOST_DICE_TRIPLE_LOSES && dice.every(d => d === dice[0]);
+const diceWon = (side, dice) => !diceTriple(dice) && side === (dice.reduce((n, d) => n + d, 0) <= C.HOST_DICE_SPLIT ? 'tai' : 'xiu');
 const validDiceBet = bet => Number.isSafeInteger(bet) && bet > 0 && Number.isSafeInteger(bet * C.HOST_DICE_PAYOUT);
 // Tiền và kết quả được ghi chung; lỗi ghi trên máy thì phục hồi giao dịch trong bộ nhớ.
 function hostTransaction(change) {
@@ -546,7 +610,7 @@ function rollDice(side, bet) {
     gamblingPeak();
     const dice = Array.from({ length: C.HOST_DICE_COUNT }, () => 1 + Math.floor(Math.random() * C.HOST_DICE_SIDES));
     const total = dice.reduce((n, d) => n + d, 0);
-    const won = side === (total <= C.HOST_DICE_SPLIT ? 'tai' : 'xiu');
+    const won = diceWon(side, dice);
     const payout = won ? bet * C.HOST_DICE_PAYOUT : 0;
     S.money += payout - bet;
     recordBook('leisureIn', payout);
@@ -657,10 +721,10 @@ function startCustomerGamble(c) {
     || g.rounds >= C.HOST_GAMBLE_CUSTOMER_ROUNDS || g.budget < 1) return;
   const bet = Math.max(1, Math.floor(g.budget * C.HOST_GAMBLE_STAKE_RATE));
   const dice = Array.from({ length: C.HOST_DICE_COUNT }, () => 1 + Math.floor(Math.random() * C.HOST_DICE_SIDES));
-  const total = dice.reduce((n, d) => n + d, 0), side = pick(['tai', 'xiu']);
+  const side = pick(['tai', 'xiu']);
   g.budget -= bet;
   g.rounds++;
-  g.pending = { bet, dice, side, won: side === (total <= C.HOST_DICE_SPLIT ? 'tai' : 'xiu'), left: C.HOST_DICE_ANIMATION_MS / 1000 };
+  g.pending = { bet, dice, side, won: diceWon(side, dice), left: C.HOST_DICE_ANIMATION_MS / 1000 };
   addGamblingRisk(C.HOST_GAMBLE_CUSTOMER_RISK, bet);
   R.led.gambleWagered += bet;
 }
@@ -761,7 +825,7 @@ function hostDiceHTML() {
   const canPlay = !hostPlaying() && g.lastRaidDay !== S.day && S.suspendDay !== S.day && !diceAnimating;
   const betValue = Math.min(modal?.hostBet || C.HOST_DICE_BETS[0], Math.max(1, S.money));
   const result = diceAnimating ? '<div class="host-dice-result" aria-live="polite"><div class="host-dice dice-rolling"><span>⚄</span><span>⚁</span><span>⚅</span></div><b>Đang quay xúc xắc…</b></div>' : last ? `<div class="host-dice-result ${last.won ? 'good-text' : 'bad-text'}" aria-live="polite"><div class="host-dice" aria-label="Xúc xắc ${last.dice.join(', ')}">${last.dice.map(d => `<span>${['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'][d]}</span>`).join('')}</div>
-    <b>${last.total} điểm · ${last.total <= C.HOST_DICE_SPLIT ? 'Tài' : 'Xỉu'} · ${last.won ? 'Thắng' : 'Thua'}</b>
+    <b>${last.total} điểm · ${diceTriple(last.dice) ? 'Bộ ba, nhà cái ăn' : last.total <= C.HOST_DICE_SPLIT ? 'Tài' : 'Xỉu'} · ${last.won ? 'Thắng' : 'Thua'}</b>
     <p>Ngày ${S.casino.day} · cược ${money(last.bet, true)} · nhận ${money(last.payout, true)} · ${last.won ? 'lãi' : 'mất'} ${money(last.bet, true)}.</p></div>` : '';
   const customers = hostPlaying() ? `<h3>Khách trong quán</h3><p class="hint">Giới thiệu một lần mỗi khách người lớn. Khách có ngân sách riêng, có thể từ chối; thắng có thể thưởng ${Math.round(C.HOST_GAMBLE_TIP_RATE * 100)}% tiền lãi. Chơi tiếp khi đóng máy chủ. Thu chi trong ca chốt cuối ngày.</p>`
     + R.pcs.filter(pc => pc.cust && !pc.cust.awaitingLoad).map(pc => {
@@ -772,7 +836,7 @@ function hostDiceHTML() {
         <button class="btn small danger" data-gamble-invite="${pc.i}" ${allowed ? '' : 'disabled'}>Giới thiệu tài xỉu</button></article>`;
     }).join('') : '<p class="hint">Mở cửa rồi quay lại app để giới thiệu cho khách đang chơi.</p>';
   return `<p class="host-status">🎲 Tiền game · ${S.casino.day === S.day ? S.casino.count : 0} lượt hôm nay · còn ${money(S.money, true)}</p>
-    <p>Luật riêng của quán: <b>3–10 Tài · 11–18 Xỉu</b>. Tung 3 xúc xắc; bộ ba vẫn tính tổng. Thắng nhận tổng x${C.HOST_DICE_PAYOUT}, đã gồm vốn cược.</p>
+    <p>Luật riêng của quán: <b>3–10 Tài · 11–18 Xỉu</b>. Tung 3 xúc xắc; ${C.HOST_DICE_TRIPLE_LOSES ? 'ra bộ ba (ba mặt giống nhau) thì cả hai cửa thua' : 'bộ ba vẫn tính tổng'}. Thắng nhận tổng x${C.HOST_DICE_PAYOUT}, đã gồm vốn cược.</p>
     <p class="hint">Ví dụ cược 10k, thắng nhận 20k: lãi 10k. Kết quả được lưu ngay; tải lại không tung lại. Thu chi giải trí tách khỏi lợi nhuận quán.</p>
     ${hostPlaying() ? '<p class="note">Chủ quán tự chơi buổi sáng; trong ca có thể giới thiệu khách hoặc dán bảng cấm.</p>' : ''}
     ${!diceAnimating && g.lastCase?.day === S.day ? gamblingCaseHTML(g.lastCase) : ''}
@@ -807,6 +871,9 @@ function renderHostApp(app = 'desktop', keepScroll = false) {
       buy: (key, qty, quote) => { const ok = buyCardPacks(key, qty, quote); if (ok) refresh(); return ok; },
       open: (key, previousId) => { const result = openCardPack(key, previousId); if (result) refresh(); return result; },
       finish: finishCardOpening,
+      shelve: (slot, id) => { const ok = setShelf(slot, id); if (ok) refresh(); return ok; },
+      dust: id => { const got = disenchantCard(id); if (got) refresh(); return got; },
+      craft: id => { const ok = craftCard(id); if (ok) refresh(); return ok; },
       meet: id => { const c = R?.queue.find(c => c.cardBuyer === id); if (c) openCardBuyer(c); },
     });
   }
@@ -969,9 +1036,9 @@ function removeExpired(k) {
 
 // ---------- Sổ sách 5 ngày, kế toán và thuế ----------
 const emptyBook = () => ({ revenue: 0, refunds: 0, materials: 0, operating: 0, investment: 0, assetSales: 0,
-  salvage: 0, wasteCost: 0, wasteQty: 0, nightCost: 0, leisureIn: 0, leisureOut: 0, gambleTips: 0, gambleFine: 0 });
+  salvage: 0, wasteCost: 0, wasteQty: 0, nightCost: 0, leisureIn: 0, leisureOut: 0, gambleTips: 0, gambleFine: 0, rewards: 0, depreciation: 0 });
 const accountantActive = (day = S.day) => day < S.accountant.until;
-const bookProfit = b => b.revenue + b.salvage - b.refunds - b.materials - b.operating;
+const bookProfit = b => b.revenue + b.salvage - b.refunds - b.materials - b.operating - b.depreciation;
 const taxFor = profit => Math.floor(Math.min(Math.max(0, profit - C.TAX_FREE), C.TAX_UPPER - C.TAX_FREE) * C.TAX_RATE
   + Math.max(0, profit - C.TAX_UPPER) * C.TAX_HIGH_RATE);
 const taxTotal = () => S.taxes.reduce((n, t) => n + t.base + t.fee, 0);
@@ -995,9 +1062,13 @@ function normalizeAccounts() {
     for (const k of Object.keys(emptyBook())) report[k] = nonnegative(report[k]);
     report.profit = bookProfit(report);
     report.tax = nonnegative(report.tax);
+    report.lossUsed = nonnegative(report.lossUsed);
     report.net = report.profit - report.tax;
     return report;
   });
+  // Bản cũ chưa theo dõi tài sản và lỗ chuyển kỳ: bắt đầu từ 0, không đoán khoản đầu tư quá khứ.
+  S.books.assets = nonnegative(S.books.assets);       // giá trị tài sản đầu tư còn lại, chưa khấu hao
+  S.books.lossCarry = nonnegative(S.books.lossCarry); // lỗ các kỳ trước chưa trừ vào lãi chịu thuế
   S.taxes = (Array.isArray(S.taxes) ? S.taxes : []).filter(t => t && Number.isFinite(t.base) && t.base > 0 && validDay(t.dueDay));
   for (const t of S.taxes) {
     t.fee = Math.min(nonnegative(t.fee), Math.floor(t.base * C.TAX_LATE_CAP));
@@ -1008,9 +1079,9 @@ function normalizeAccounts() {
   S.accountant.autoTax = !!S.accountant.autoTax;
   S.accountant.minSale = Number.isFinite(S.accountant.minSale) && S.accountant.minSale >= 0 ? Math.floor(S.accountant.minSale) : null;
   S.waste = { nextId: 1, lots: [], quote: null, lastOfferDay: 0, ...S.waste };
-  S.waste.lots = (Array.isArray(S.waste.lots) ? S.waste.lots : []).filter(b => b && ITEMS[b.k] && Number.isInteger(b.qty) && b.qty > 0
-    && Number.isInteger(b.id) && b.id > 0 && validDay(b.day) && Number.isFinite(b.unitCost) && b.unitCost >= 0
-    && ['pack', 'cooked'].includes(b.kind));
+  S.waste.lots = (Array.isArray(S.waste.lots) ? S.waste.lots : []).filter(b => b && (b.kind === 'part' ? PARTS[b.k] && Number.isInteger(b.lv) && b.lv >= 0 && b.lv <= 3 : ITEMS[b.k])
+    && Number.isInteger(b.qty) && b.qty > 0 && Number.isInteger(b.id) && b.id > 0 && validDay(b.day) && Number.isFinite(b.unitCost) && b.unitCost >= 0
+    && ['pack', 'cooked', 'part'].includes(b.kind));
   S.waste.nextId = Math.max(1, Math.floor(nonnegative(S.waste.nextId)), ...S.waste.lots.map(b => b.id + 1));
   S.waste.lastOfferDay = Math.floor(nonnegative(S.waste.lastOfferDay));
   S.waste.removed = nonnegative(S.waste.removed);
@@ -1021,6 +1092,7 @@ function normalizeAccounts() {
 }
 function recordBook(key, amount) {
   S.books.pending[key] += amount;
+  if (key === 'investment') S.books.assets += amount;   // tiền đầu tư thành tài sản, khấu hao dần mỗi ngày
 }
 function hireAccountant() {
   if (accountantActive() || S.money < C.ACCOUNT_FEE || (R && !R.over)) return;
@@ -1052,6 +1124,10 @@ function finishAccounts(day, led, costs, books) {
   const fee = accountantActive(day) ? C.ACCOUNT_FEE / C.ACCOUNT_DAYS : 0;
   pending.operating += Object.values(costs).reduce((n, v) => n + v, 0) + books.interest + led.fine + books.lateFee + fee;
   pending.nightCost += costs.nightWage + costs.lights;
+  const dep = S.books.assets <= C.DEPRECIATION_MIN ? S.books.assets : Math.floor(S.books.assets * C.DEPRECIATION_RATE);
+  S.books.assets -= dep;
+  pending.depreciation += dep;
+  led.depreciation = dep;
   led.materials = pending.materials;
   led.prepCosts = pending.operating - Object.values(costs).reduce((n, v) => n + v, 0) - books.interest - led.fine;
   led.salvage = pending.salvage;
@@ -1068,7 +1144,11 @@ function finishAccounts(day, led, costs, books) {
   if (S.books.days >= C.ACCOUNT_DAYS) {
     const report = { ...S.books.period, from: S.books.from, to: day, free: S.books.free };
     report.profit = bookProfit(report);
-    report.tax = report.free ? 0 : taxFor(report.profit);
+    // Lỗ kỳ này để dành trừ vào lãi kỳ sau; kỳ miễn thuế không dùng lỗ cũ để người chơi khỏi thiệt.
+    report.lossUsed = report.free || report.profit <= 0 ? 0 : Math.min(S.books.lossCarry, report.profit);
+    if (report.profit < 0) S.books.lossCarry += -report.profit;
+    S.books.lossCarry -= report.lossUsed;
+    report.tax = report.free ? 0 : taxFor(report.profit - report.lossUsed);
     report.net = report.profit - report.tax;
     S.books.reports.unshift(report);
     S.books.reports = S.books.reports.slice(0, C.ACCOUNT_HISTORY);
@@ -1088,7 +1168,7 @@ function currentBook() {
   for (const k in b) b[k] = S.books.period[k] + S.books.pending[k];
   return b;
 }
-const expectedTax = () => S.books.free ? 0 : taxFor(bookProfit(currentBook()));
+const expectedTax = () => S.books.free ? 0 : taxFor(bookProfit(currentBook()) - S.books.lossCarry);
 const reservedMoney = () => S.bill.rent + S.bill.net + S.bill.power + dueTotal() + taxTotal() + expectedTax();
 function accountAdvice(b) {
   if (bookProfit(b) < 0) return ACCOUNT_LINES.loss;
@@ -1099,11 +1179,12 @@ function accountAdvice(b) {
 function reportHTML(b) {
   const row = (name, value) => `<div class="sum-row"><span>${name}</span><b>${money(value)}</b></div>`;
   return `<div class="account-report">${row('Doanh thu sau hoàn tiền', b.revenue + b.salvage - b.refunds)}
-    ${row('Giá vốn nguyên liệu và thẻ', b.materials)}${row('Chi phí vận hành', b.operating)}
-    ${row('Lợi nhuận trước thuế', b.profit)}${row(b.free ? 'Thuế (kỳ đầu miễn)' : 'Thuế kỳ này', b.tax)}
+    ${row('Giá vốn nguyên liệu và thẻ', b.materials)}${row('Chi phí vận hành', b.operating)}${b.depreciation ? row('Khấu hao tài sản', b.depreciation) : ''}
+    ${row('Lợi nhuận trước thuế', b.profit)}${b.lossUsed ? row('Trừ lỗ kỳ trước', b.lossUsed) : ''}${row(b.free ? 'Thuế (kỳ đầu miễn)' : 'Thuế kỳ này', b.tax)}
     ${row('Lợi nhuận sau thuế', b.net)}${row('Tiền đầu tư riêng', b.investment)}${row('Thu thanh lý máy riêng', b.assetSales)}
     ${b.leisureOut ? `<p class="muted small">🎲 Giải trí riêng: cược ${money(b.leisureOut)}, nhận ${money(b.leisureIn)}. Không tính vào lãi và thuế kinh doanh.</p>` : ''}
     ${b.gambleTips || b.gambleFine ? `<p class="muted small">🎲 Khách thưởng từ cược: ${money(b.gambleTips)} · phạt cờ bạc: ${money(b.gambleFine)}. Tách khỏi lãi và thuế kinh doanh.</p>` : ''}
+    ${b.rewards ? `<p class="muted small">🎯 Thưởng nhiệm vụ và mốc sưu tầm: ${money(b.rewards)}. Không tính vào lãi và thuế kinh doanh.</p>` : ''}
     <p class="muted small">Thu hồi đồ thải: ${money(b.salvage)} · giá vốn đồ bỏ: ${money(b.wasteCost)} (đã nằm trong giá vốn).</p></div>`;
 }
 function accountsHTML() {
@@ -1112,6 +1193,8 @@ function accountsHTML() {
     <p>Ngày ${S.books.from}–${S.books.from + C.ACCOUNT_DAYS - 1} · chốt sau <b>${C.ACCOUNT_DAYS - S.books.days} ngày</b>${S.books.free ? ' · kỳ đầu miễn thuế' : ''}.</p>
     <div class="sum-row"><span>Lãi trước thuế đang ghi nhận</span><b>${money(bookProfit(b))}</b></div>
     <div class="sum-row"><span>Thuế dự kiến theo số đã ghi</span><b>${money(expectedTax())}</b></div>
+    ${S.books.lossCarry ? `<div class="sum-row"><span>Lỗ kỳ trước chưa trừ</span><b>${money(S.books.lossCarry)}</b></div>` : ''}
+    <div class="sum-row"><span>Tài sản đầu tư còn lại</span><b>${money(S.books.assets)}</b></div>
     <div class="sum-row"><span>Dự phòng hóa đơn & thuế</span><b>${money(reservedMoney())}</b></div>
     <div class="sum-row total"><span>Tiền có thể dùng sau dự phòng</span><b>${money(S.money - reservedMoney())}</b></div>
     <p class="muted small">Số dự phòng chưa gồm tiền gốc vay và chi phí tương lai. Thuế hư cấu: miễn ${money(C.TAX_FREE)} đầu, phần tới ${money(C.TAX_UPPER)} chịu ${C.TAX_RATE * 100}%, phần vượt chịu ${C.TAX_HIGH_RATE * 100}%.</p>
@@ -1124,7 +1207,7 @@ function accountsHTML() {
       : `<p>Thuê ${C.ACCOUNT_DAYS} ngày, trả trước ${money(C.ACCOUNT_FEE)}. Phí tính dần vào chi phí mỗi ngày; không tự gia hạn.</p>
       <button class="btn small" data-hire-accountant ${S.money < C.ACCOUNT_FEE ? 'disabled' : ''}>${S.accountant.until ? 'Gia hạn' : 'Thuê kế toán'} · ${money(C.ACCOUNT_FEE)}</button>`}
     <label class="account-option"><input type="checkbox" data-auto-tax ${S.accountant.autoTax ? 'checked' : ''} ${active ? '' : 'disabled'}> Nhờ kế toán tự đóng thuế cuối ngày khi đủ tiền</label>
-    <p class="muted small">Tiền vay và trả gốc không tính vào lãi. Đầu tư máy/nâng cấp không giảm lãi tính thuế. Giá vốn kho cũ ước theo giá nhập chuẩn.</p>
+    <p class="muted small">Tiền vay và trả gốc không tính vào lãi. Đầu tư máy, linh kiện, nâng cấp và game không trừ một lần mà khấu hao ${C.DEPRECIATION_RATE * 100}%/ngày trên giá trị còn lại. Kỳ lỗ được trừ vào lãi các kỳ sau. Giá vốn kho cũ ước theo giá nhập chuẩn.</p>
     ${S.books.reports.map(r => `<details><summary>Báo cáo ngày ${r.from}–${r.to} · sau thuế ${money(r.net)}</summary>${reportHTML(r)}</details>`).join('')}
     </div>`;
 }
@@ -1140,6 +1223,14 @@ function addWaste(k, qty, unitCost, kind) {
   if (kept) S.waste.lots.push({ id: S.waste.nextId++, k, qty: kept, unitCost, kind, day: S.day });
   if (kept < qty) S.waste.removed = (S.waste.removed || 0) + qty - kept;
 }
+// Linh kiện cũ thay ra: là tài sản, không ghi giá vốn nguyên liệu; chỉ thu gom được một phần.
+const partValue = (k, lv) => lv ? PARTS[k].cost[lv] : C.THIEF_BASE_REPLACE[k] ?? C.WASTE_PART_BASE;
+function addPartWaste(k, lv) {
+  if (wasteCount() >= C.WASTE_CAP) { S.waste.removed = (S.waste.removed || 0) + 1; return; }
+  S.waste.lots.push({ id: S.waste.nextId++, k, lv, qty: 1, unitCost: partValue(k, lv), kind: 'part', day: S.day });
+}
+const wasteName = b => b.kind === 'part' ? `${PARTS[b.k].icon} ${PARTS[b.k].levels[b.lv] || PARTS[b.k].name}` : `${ITEMS[b.k].icon} ${ITEMS[b.k].name}`;
+const wasteRatio = kind => kind === 'pack' ? C.WASTE_PACK_RATIO : kind === 'part' ? C.WASTE_PART_RATIO : C.WASTE_COOKED_RATIO;
 function discardStock(k, b) {
   recordBook('materials', b.qty * b.unitCost);
   addWaste(k, b.qty, b.unitCost, 'pack');
@@ -1161,7 +1252,7 @@ function pruneWaste() {
 function ensureWasteQuote() {
   pruneWaste();
   if (S.waste.lastOfferDay === S.day || !wasteCount()) return;
-  const value = S.waste.lots.reduce((n, b) => n + b.qty * b.unitCost * (b.kind === 'pack' ? C.WASTE_PACK_RATIO : C.WASTE_COOKED_RATIO), 0);
+  const value = S.waste.lots.reduce((n, b) => n + b.qty * b.unitCost * wasteRatio(b.kind), 0);
   S.waste.quote = { day: S.day, ids: S.waste.lots.map(b => b.id), price: Math.floor(value), status: 'offer', negotiated: false };
   S.waste.lastOfferDay = S.day;
   saveGame();   // lời chào thuộc đúng lô, tải lại cũng không quay giá
@@ -1199,10 +1290,10 @@ function wasteHTML() {
   const q = S.waste.quote, active = accountantActive();
   const group = kind => S.waste.lots.filter(b => b.kind === kind).reduce((n, b) => n + b.qty, 0);
   return `<div class="account-box"><h3>♻️ Kho đồ thải</h3><p><b>${wasteCount()}/${C.WASTE_CAP}</b> đơn vị · giữ tối đa ${C.WASTE_KEEP_DAYS} ngày.</p>
-    <p>Nguyên gói: ${group('pack')} · đồ đã chế biến: ${group('cooked')}.</p>
+    <p>Nguyên gói: ${group('pack')} · đồ đã chế biến: ${group('cooked')} · linh kiện cũ: ${group('part')}.</p>
     <p class="muted small">Kho riêng để thu hồi/xử lý, không đưa lại cho khách. Đồ quá hạn hoặc vượt sức chứa được chuyển xử lý, không ghi giá vốn lần hai.</p>
     ${S.waste.removed ? `<p class="warn-text">Đã chuyển xử lý ${S.waste.removed} đơn vị quá hạn hoặc vượt sức chứa.</p>` : ''}
-    ${S.waste.lots.length ? `<details><summary>Xem các lô đồ thải</summary>${S.waste.lots.map(b => `<p>${ITEMS[b.k].icon} ${ITEMS[b.k].name} ×${b.qty} · ${b.kind === 'pack' ? 'nguyên gói' : 'đã chế biến'} · còn ${C.WASTE_KEEP_DAYS - (S.day - b.day)} ngày.</p>`).join('')}</details>` : ''}
+    ${S.waste.lots.length ? `<details><summary>Xem các lô đồ thải</summary>${S.waste.lots.map(b => `<p>${wasteName(b)} ×${b.qty} · ${b.kind === 'pack' ? 'nguyên gói' : b.kind === 'part' ? 'linh kiện thay ra' : 'đã chế biến'} · còn ${C.WASTE_KEEP_DAYS - (S.day - b.day)} ngày.</p>`).join('')}</details>` : ''}
     ${q ? `<h4>${ACCOUNT_LINES.buyer}</h4><p class="muted small">${ACCOUNT_LINES.offer}</p>
       ${q.result ? `<p role="status">${ACCOUNT_LINES[q.result]}</p>` : ''}
       ${q.status === 'offer' ? `<p>Giá cả lô đã chào: <b>${money(q.price)}</b>. Đồ mới gom chờ lượt ngày mai.</p>
@@ -1210,11 +1301,134 @@ function wasteHTML() {
         <button class="btn small" data-bargain-waste ${!active || q.negotiated ? 'disabled' : ''}>Nhờ kế toán trả giá</button></div>
         <p class="muted small">Có thể giữ lại chờ ngày mai. Trả giá một lần: ${C.WASTE_BARGAIN_CHANCE * 100}% tăng ${C.WASTE_BARGAIN_BONUS * 100}%, ${C.WASTE_KEEP_CHANCE * 100}% giữ giá, còn lại rút lời chào.</p>`
       : `<p>${q.status === 'sold' ? '✅ Đã bán lô này. Ngày mai có lượt thu gom mới.' : 'Chưa bán được. Ngày mai có lượt thu gom mới.'}</p>`}`
-      : `<p class="muted small">${wasteCount() ? 'Ngày mai có lượt thu gom mới.' : 'Chưa có đồ thải. Hàng bỏ và khay đổ sẽ được gom vào đây.'}</p>`}
+      : `<p class="muted small">${wasteCount() ? 'Ngày mai có lượt thu gom mới.' : 'Chưa có đồ thải. Hàng bỏ, khay đổ và linh kiện cũ thay ra sẽ được gom vào đây.'}</p>`}
     <label class="account-option">Nhờ tự bán nếu giá cả lô từ (đồng)
       <input type="number" min="0" step="100" inputmode="numeric" data-min-sale placeholder="Để trống: tự quyết"
         value="${S.accountant.minSale ?? ''}" ${active ? '' : 'disabled'}></label>
     <p class="muted small">Cần hợp đồng kế toán còn hạn. Để trống để tắt tự bán; thu hồi chỉ được phần nhỏ giá vốn.</p></div>`;
+}
+
+// ---------- Nhiệm vụ tuần & mốc sưu tầm thẻ ----------
+const questWeek = (day = S.day) => Math.floor((day - 1) / 7) + 1;   // tuần 1 = ngày 1–7 (Thứ 2 → Chủ nhật)
+const questDef = id => QUESTS.find(d => d.id === id);
+const emptyQuestStats = () => Object.fromEntries(QUESTS.map(d => [d.id, 0]));
+const questReward = (base, week = S.quests.week) => round1k(base * Math.min(C.QUEST_REWARD_MAX_MUL, 1 + C.QUEST_REWARD_GROWTH * (week - 1)));
+// Kết quả một ngày theo từng chỉ số nhiệm vụ
+function questStats(led) {
+  return {
+    served: led.served,
+    happy: led.visits.filter(v => v.stars >= 4).length,
+    fiveStar: led.reviews.filter(r => r.stars === 5).length,
+    revenue: led.hours + led.food + led.tips,
+    food: led.food,
+    clean: !led.walkouts && led.served >= C.QUEST_CLEAN_MIN_SERVED ? 1 : 0,
+    cards: (led.cardPackSales || 0) + (led.cardSales || 0),
+  };
+}
+// Mục tiêu bám theo sức quán: hơn tuần trước một chút, không thấp hơn mức tối thiểu
+function questTarget(def, last) {
+  if (def.fixed) return def.min;
+  const step = def.round || 1;
+  // làm tròn 6 chữ số trước khi làm tròn lên: 200 × 1,1 phải ra 220, không phải 221 vì sai số dấu phẩy động
+  return Math.max(def.min, Math.ceil(+((last[def.id] || 0) * C.QUEST_STRETCH / step).toFixed(6)) * step);
+}
+function questText(x) {
+  const d = questDef(x.id);
+  return d.text.replace('{n}', d.money ? money(x.target) : x.target).replace('{served}', C.QUEST_CLEAN_MIN_SERVED);
+}
+function normalizeQuests() {
+  const q = S.quests && typeof S.quests === 'object' ? S.quests : {};
+  const stats = raw => {
+    const out = emptyQuestStats();
+    for (const k in out) out[k] = Number.isFinite(raw?.[k]) && raw[k] >= 0 ? raw[k] : 0;
+    return out;
+  };
+  S.quests = {
+    week: Number.isSafeInteger(q.week) && q.week >= 1 ? q.week : 0,   // 0 = bản lưu cũ, chọn nhiệm vụ ở buổi sáng tới
+    cur: stats(q.cur), last: stats(q.last), bonus: q.bonus === true,
+    list: (Array.isArray(q.list) ? q.list : []).filter(x => x && questDef(x.id) && Number.isSafeInteger(x.target) && x.target > 0
+      && Number.isSafeInteger(x.reward) && x.reward >= 0).slice(0, C.QUEST_COUNT)
+      .map(x => ({ id: x.id, target: x.target, reward: x.reward, done: x.done === true })),
+  };
+}
+// Sang tuần mới: kết quả tuần vừa xong làm mốc, chọn nhiệm vụ mới. Trả về true nếu vừa đổi.
+function ensureQuests() {
+  const week = questWeek(), q = S.quests;
+  if (q.week === week && q.list.length) return false;
+  if (q.week !== week) {
+    q.last = q.week === week - 1 ? q.cur : emptyQuestStats();
+    q.cur = emptyQuestStats();
+    q.week = week;
+    q.bonus = false;
+  }
+  const pool = QUESTS.filter(d => d.needs !== 'cards' || S.cards.enabled);
+  q.list = [];
+  while (q.list.length < C.QUEST_COUNT && pool.length) {
+    const d = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
+    q.list.push({ id: d.id, target: questTarget(d, q.last), reward: questReward(d.reward, week), done: false });
+  }
+  return true;
+}
+function payReward(n) {
+  S.money += n;
+  recordBook('rewards', n);
+}
+// Cuối ngày: cộng kết quả vào tuần, trả thưởng nhiệm vụ vừa xong (ghi vào led.quests cho bảng tổng kết)
+function trackQuests(led) {
+  ensureQuests();
+  const q = S.quests, today = questStats(led);
+  for (const k in q.cur) q.cur[k] += today[k] || 0;
+  for (const x of q.list) {
+    if (x.done || q.cur[x.id] < x.target) continue;
+    x.done = true;
+    payReward(x.reward);
+    led.quests.push({ text: questText(x), reward: x.reward });
+  }
+  if (!q.bonus && q.list.length && q.list.every(x => x.done)) {
+    q.bonus = true;
+    const reward = questReward(C.QUEST_ALL_BONUS);
+    payReward(reward);
+    led.quests.push({ text: `Xong cả ${q.list.length} nhiệm vụ tuần`, reward });
+  }
+}
+const cardUnique = setId => CARD_CATALOG.filter(c => c.set === setId && cardCount(S.cards.owned[c.id]) > 0).length;
+// Nhận mọi mốc đã đạt của một bộ; trả về tổng tiền thưởng (0 nếu chưa có mốc nào)
+function claimCardMilestones(setId) {
+  normalizeCards();
+  if (!CARD_SETS.some(s => s.id === setId) || hostPlaying()) return 0;
+  const have = cardUnique(setId);
+  let got = S.cards.milestones[setId], total = 0;
+  while (got < C.CARD_MILESTONES.length && have >= C.CARD_MILESTONES[got].n) total += C.CARD_MILESTONES[got++].reward;
+  if (!total) return 0;
+  const ok = cardTransaction(() => {
+    S.cards.milestones[setId] = got;
+    payReward(total);
+  });
+  return ok ? total : 0;
+}
+function cardMilestonesHTML() {
+  if (!S.cards.enabled) return '';
+  return '<h4>🎴 Mốc sưu tầm thẻ</h4>' + CARD_SETS.map(set => {
+    const have = cardUnique(set.id), total = CARD_CATALOG.filter(c => c.set === set.id).length;
+    const next = C.CARD_MILESTONES[S.cards.milestones[set.id]], ready = next && have >= next.n;
+    return `<div class="quest-row ${next ? '' : 'done'}"><span class="quest-icon">${next ? '🎴' : '🏆'}</span><div>
+      <b>${esc(set.name)}</b><div class="quest-bar"><i style="width:${Math.round(have / total * 100)}%"></i></div>
+      <span class="muted small">Đang có ${have}/${total} mã · ${next ? `mốc ${next.n} mã: thưởng ${money(next.reward)}` : 'đã nhận hết các mốc'}</span>
+      ${ready ? `<button class="btn small primary" data-card-milestone="${set.id}" ${hostPlaying() ? 'disabled' : ''}>Nhận thưởng mốc</button>` : ''}</div></div>`;
+  }).join('') + '<p class="muted small">Đếm số mã khác nhau đang có trong kho thẻ. Mỗi mốc nhận một lần; bán thẻ sau đó không bị thu lại thưởng.</p>';
+}
+function questsHTML() {
+  const q = S.quests;
+  const fmt = (d, n) => d.money ? money(n) : n;
+  const rows = q.list.map(x => {
+    const d = questDef(x.id), have = Math.min(q.cur[x.id], x.target);
+    return `<div class="quest-row ${x.done ? 'done' : ''}"><span class="quest-icon">${x.done ? '✅' : d.icon}</span><div>
+      <b>${questText(x)}</b><div class="quest-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${x.target}" aria-valuenow="${have}"><i style="width:${Math.round(have / x.target * 100)}%"></i></div>
+      <span class="muted small">${fmt(d, have)}/${fmt(d, x.target)} · thưởng ${money(x.reward)}${x.done ? ' · đã nhận' : ''}</span></div></div>`;
+  }).join('');
+  return `<div class="quest-box"><h3>🎯 Nhiệm vụ tuần ${q.week}</h3>
+    <p class="hint">Còn ${7 - weekday()} ngày, tính cả hôm nay. Kết quả cộng khi đóng cửa, xong là nhận thưởng ngay. Xong cả ${q.list.length} nhiệm vụ: thưởng thêm ${money(questReward(C.QUEST_ALL_BONUS))}${q.bonus ? ' ✅' : ''}.</p>
+    ${rows}${cardMilestonesHTML()}</div>`;
 }
 
 // ---------- Màn hình & modal ----------
@@ -1465,6 +1679,7 @@ function markAgain(c) { if (!c.ev.again) note(c, 'again', -10, 'Lại gặp đú
 function hit(c, t, base, aspect, why) {
   let mul = careOf(c, aspect, base);
   if (base < 0 && repeatsMemory(c, t)) { mul *= 1.5; markAgain(c); }
+  if (base < 0) mul *= 1 - cardFx('calm');   // thẻ Bình tĩnh trên kệ
   const d = base * mul;
   c.sat = clamp(c.sat + d, 0, 100);
   c.ev[t] = (c.ev[t] || 0) + d;
@@ -1706,6 +1921,7 @@ function buyPart(i, k) {
   const tierBefore = machineTier(m);
   S.money -= cost;
   recordBook('investment', cost);
+  if (m.missing !== k) addPartWaste(k, lv);   // đồ cũ tháo ra (đồ bị trộm thì không còn gì để thu)
   m[k]++;
   if (m.missing === k) m.missing = null;   // mua đồ mới cấp cao hơn thì khỏi mua lại đồ bị trộm
   saveGame();
@@ -1724,6 +1940,7 @@ function fixWear(i, full) {
   if (m.wear >= 100 || S.money < cost) return;
   S.money -= cost;
   recordBook('operating', cost);
+  if (full) { addPartWaste('kb', m.kb); addPartWaste('mouse', m.mouse); }
   m.wear = full ? 100 : Math.min(100, m.wear + C.FIX_CHEAP_GAIN);
   saveGame();
   renderPrep();
@@ -1749,6 +1966,7 @@ function sellValue(m) {
 function sellMachine(i) {
   if (S.machines.length <= 1) return;
   recordBook('assetSales', sellValue(S.machines[i]));
+  S.books.assets -= Math.min(S.books.assets, sellValue(S.machines[i]));
   S.money += sellValue(S.machines[i]);
   S.machines.splice(i, 1);
   // máy quen của khách quen dịch theo số thứ tự mới
@@ -2013,6 +2231,7 @@ function askFireStaff(id) {
 }
 function renderPrep() {
   gamblingPeak();
+  if (ensureQuests()) saveGame();   // nhiệm vụ tuần mới thuộc đúng bản lưu, tải lại không đổi
   ensureWasteQuote();
   autoSellWaste();
   renderMorning();
@@ -2071,6 +2290,7 @@ function renderPrep() {
     billHTML() + netPlansHTML() + loansHTML();
   $('#prep-accounts').innerHTML = accountsHTML();
   $('#prep-waste').innerHTML = wasteHTML();
+  $('#prep-quests').innerHTML = questsHTML();
 }
 
 // ---------- Hóa đơn buổi sáng: thời tiết, lịch cúp điện, hóa đơn tuần, vay vốn ----------
@@ -2232,7 +2452,7 @@ function startDay() {
       gambleTips: 0, gambleFine: S.gambling.lastCase?.day === S.day ? S.gambling.lastCase.fine : 0,
       gambleCase: S.gambling.lastCase?.day === S.day ? S.gambling.lastCase : null, gambleInvites: 0, gambleWagered: 0, gambleNotes: [],
       acPower: 0, fuel: 0, refund: 0, hotHours: 0, darkHours: 0, smashes: 0, outages: 0, noise: 0, kicked: 0, mom: [], thefts: [], caught: 0, thiefCash: 0,
-      lights: 0, nightWage: 0, closeRefund: 0, overnight: 0, raid: null, closedAt: 0, staffLoads: 0 },
+      lights: 0, nightWage: 0, closeRefund: 0, overnight: 0, raid: null, closedAt: 0, staffLoads: 0, quests: [] },
     // đóng cửa chủ động: closing = đang chuẩn bị đóng (không nhận khách mới) · shutter = kéo cửa cuốn · speed = tua nhanh
     closing: false, shutter: false, speed: 1, paceRest: 0,
     // hạ tầng: nhiệt độ phòng, điều hòa, lịch cúp điện hôm nay, máy phát
@@ -2247,7 +2467,7 @@ function startDay() {
       : Math.random() < C.POLICE_RANDOM ? rand(C.OPEN_HOUR + 1, C.EVENT_END_HOUR - 1) : null,
     momAt: null, momKid: 0, momCount: 0,   // mẹ gank: giờ phụ huynh tới, tìm khách nào, số lần hôm nay
     // trộm: giờ kẻ trộm tới hôm nay (camera làm trộm ngại ghé) · escape = kẻ trộm đang chạy ra cửa
-    thiefAt: S.day >= C.THIEF_FROM_DAY && Math.random() < C.THIEF_DAY_CHANCE * (S.upgrades.camera ? 0.5 : 1)
+    thiefAt: S.day >= C.THIEF_FROM_DAY && Math.random() < C.THIEF_DAY_CHANCE * (S.upgrades.camera ? 0.5 : 1) * (1 - cardFx('guard'))
       ? rand(C.OPEN_HOUR + 1, C.EVENT_END_HOUR - 2) : null,
     escape: null,
   };
@@ -2347,7 +2567,7 @@ function smash(pc, c) {
   const m = pc.m;
   if (m.wear <= 0) return;
   const tough = 1 - 0.15 * (m.kb + m.mouse) / 2;   // phím chuột xịn bền hơn
-  m.wear = Math.max(0, Math.round(m.wear - rand(...C.SMASH_DMG) * tough));
+  m.wear = Math.max(0, Math.round(m.wear - rand(...C.SMASH_DMG) * tough * (1 - cardFx('tough'))));
   R.led.smashes++;
   SFX.play('smash');
   VFX.shake();
@@ -2690,7 +2910,7 @@ function nextSpawnDelay() {
   const pcs = Math.min(R.pcs.length, C.PACE_LINEAR_PCS)
     + Math.sqrt(Math.max(0, R.pcs.length - C.PACE_LINEAR_PCS)) * C.PACE_EXTRA_PC_MUL;
   const busy = Math.min(C.PACE_MAX_BUSY_MUL, 1 + pendingWork() * C.PACE_TASK_MUL);
-  const mean = C.SPAWN_BASE / (pcs * demand);
+  const mean = C.SPAWN_BASE / (pcs * demand * (1 + cardFx('traffic')));
   return Math.max(C.PACE_MIN_SPAWN, mean * rand(0.5, 1.5)) * busy;
 }
 
@@ -2795,7 +3015,8 @@ function segWeight(id, tier) {
   const wins = [...(s.when || []), ...(isWeekend() ? s.weekend || [] : [])];
   const inWin = wins.filter(([a, b]) => R.time >= a && R.time < b).map(x => x[2]);
   const w = inWin.length ? Math.max(...inWin) : s.base;
-  return s.kid ? w * kidMul() : w;
+  const vip = C.CARD_VIP_SEGMENTS.includes(id) ? 1 + cardFx('vip') : 1;
+  return (s.kid ? w * kidMul() : w) * vip;
 }
 function pickSegment(tier) {
   const ids = Object.keys(SEGMENTS).filter(id => segWeight(id, tier) > 0);
@@ -3430,6 +3651,7 @@ function deliver(pc) {
   c.ate = true;
   c.ateMi = c.ateMi || !!t.items.mi;
   c.hadCoffee = c.hadCoffee || !!t.items.caphe;
+  if (cardFx('food')) pay = round500(pay * (1 + cardFx('food')));   // thẻ Ngon miệng trên kệ
   S.money += pay;
   R.led.food += pay;
   fx(pc.el.root, `+${money(pay)}`, 'money');
@@ -3603,7 +3825,7 @@ function leave(pc, reason) {
   checkBetter(c);
   let tip = 0;
   if (!['rage', 'kicked', 'mom'].includes(reason) && !c.sick && c.sat >= 85) {
-    tip = pick([2000, 5000, 5000, 10000]);
+    tip = round500(pick([2000, 5000, 5000, 10000]) * (1 + cardFx('tip')));
     S.money += tip;
     R.led.tips += tip;
   }
@@ -4184,6 +4406,7 @@ function endDay() {
   S.pendingKid += R.kidReports;
   R.reports = R.kidReports = 0;
   const day = S.day;
+  trackQuests(led);
   if (S.gambling.activityDay !== day) {
     S.gambling.risk = Math.max(0, S.gambling.risk - C.HOST_GAMBLE_DECAY);
     if (!S.gambling.risk) S.gambling.organized = false;
@@ -4381,7 +4604,8 @@ function ledgerHTML(led, costs, interest) {
     .filter(([, v], i) => v || i === 0 || i === 3);
   const out = [...cash, ...billed].reduce((s, [, v]) => s + v, 0);
   const materials = led.materials || 0, prep = led.prepCosts || 0;
-  const profit = income - out - materials - prep;
+  const dep = led.depreciation || 0;
+  const profit = income - out - materials - prep - dep;
   const group = (title, sum, rows, cls) => `<details class="sum-group ${cls}"><summary>${row(title, sum, cls)}</summary>${rows}</details>`;
   return `<div class="sum-block">
     ${group('💰 Thu', plus(income), row('⏱️ Tiền giờ chơi', plus(led.hours)) + row('🍜 Bán đồ ăn uống', plus(led.food)) + row('💝 Tiền tip', plus(led.tips)) + (led.thiefCash ? row('🦹 Thưởng / bắt đền trộm', plus(led.thiefCash)) : '') + (led.salvage ? row('♻️ Thu hồi đồ thải', plus(led.salvage)) : '') + (led.cardIncome ? row('🎴 ' + CARD_SHOP_COPY.income, plus(led.cardIncome)) : ''), 'up')}
@@ -4391,11 +4615,13 @@ function ledgerHTML(led, costs, interest) {
     ${led.cardCost ? `<p class="hint">🎴 ${CARD_SHOP_COPY.expense}: ${money(led.cardCost)} — đã nằm trong giá vốn bên trên.</p>` : ''}
     ${led.cardSpent || led.cardPackSales || led.cardSales || led.cardOpened ? `<p class="note">🎴 ${CARD_SHOP_COPY.summary}: ${CARD_SHOP_COPY.spent} ${money(led.cardSpent || 0)} · ${CARD_SHOP_COPY.soldPacks} ${led.cardPackSales || 0} · ${CARD_SHOP_COPY.soldCards} ${led.cardSales || 0} · ${CARD_SHOP_COPY.opened} ${led.cardOpened || 0}. Tiền nhập gói chuyển thành hàng tồn; chỉ ghi giá vốn khi bán.</p>` : ''}
     ${prep ? row('🧮 Chi phí sáng, kế toán & phạt hóa đơn', minus(prep)) : ''}
+    ${dep ? row('📉 Khấu hao máy, nâng cấp & game', minus(dep)) : ''}
     ${row(profit >= 0 ? 'Lãi hôm nay trước thuế' : 'Lỗ hôm nay trước thuế', (profit >= 0 ? '+' : '') + money(profit), 'total ' + (profit >= 0 ? 'up' : 'down'))}
     ${led.leisureOut ? `<p class="note">🎲 Giải trí riêng buổi sáng: cược ${money(led.leisureOut)}, nhận ${money(led.leisureIn)}; chênh lệch ${money(led.leisureIn - led.leisureOut)}. Đã tính vào tiền quán, tách khỏi lãi kinh doanh bên trên.</p>` : ''}
     ${led.gambleTips || led.gambleFine || led.gambleInvites ? `<p class="note">🎲 Giới thiệu ${led.gambleInvites} khách đồng ý · khách cược ${money(led.gambleWagered)} bằng tiền riêng · thưởng chủ ${money(led.gambleTips)} · phạt cờ bạc ${money(led.gambleFine)}. Thưởng và phạt tách khỏi lãi kinh doanh.</p>` : ''}
     ${led.gambleCase ? gamblingCaseHTML(led.gambleCase) : ''}
     ${led.gambleNotes?.length ? `<details><summary>🎲 Diễn biến cờ bạc trong quán</summary>${led.gambleNotes.map(n => `<p>${esc(n)}</p>`).join('')}</details>` : ''}
+    ${led.quests?.length ? `<p class="note">🎯 ${led.quests.map(x => `${esc(x.text)}: +${money(x.reward)}`).join(' · ')}. Thưởng tách khỏi lãi kinh doanh.</p>` : ''}
     ${led.replyNotes?.length ? `<p class="note">💬 Sau phản hồi review: ${led.replyNotes.map(esc).join(' · ')}</p>` : ''}
     <p class="muted small">Bấm vào từng nhóm để xem chi tiết. Hóa đơn tuần đang cộng dồn <b>${money(S.bill.rent + S.bill.net + S.bill.power)}</b>${S.bill.days ? `, chốt sau ${C.BILL_DAYS - S.bill.days} ngày` : ''}.</p>
   </div>`;
@@ -4476,46 +4702,96 @@ function showSummary({ led, costs, books, newlyExpired, spoiled, day, bankrupt }
 }
 
 // ---------- Hướng dẫn ----------
+// Chia mục hướng dẫn thành tab cho người mới khỏi ngợp; tab cuối người chơi xem được giữ trong phiên.
+let howtoTab = 0;
+function howtoTabs(groups) {
+  howtoTab = Math.min(howtoTab, groups.length - 1);
+  return `<div class="howto-tabs" role="tablist">${groups.map(([name], i) => `<button class="btn small ${i === howtoTab ? 'primary' : 'ghost'}" role="tab" aria-selected="${i === howtoTab}" data-howto-tab="${i}">${name}</button>`).join('')}</div>
+    ${groups.map(([, items], i) => `<ol class="howto" data-howto-panel="${i}" ${i === howtoTab ? '' : 'hidden'}>${items.map(t => `<li>${t}</li>`).join('')}</ol>`).join('')}`;
+}
+function bindHowtoTabs(card) {
+  card.addEventListener('click', e => {
+    const b = e.target.closest('[data-howto-tab]');
+    if (!b) return;
+    howtoTab = Number(b.dataset.howtoTab);
+    card.querySelectorAll('[data-howto-tab]').forEach(x => {
+      const on = Number(x.dataset.howtoTab) === howtoTab;
+      x.classList.toggle('primary', on); x.classList.toggle('ghost', !on); x.setAttribute('aria-selected', on);
+    });
+    card.querySelectorAll('[data-howto-panel]').forEach(p => { p.hidden = Number(p.dataset.howtoPanel) !== howtoTab; });
+  });
+}
 function openHowTo() {
   const playing = R && !R.over;
   const wasPaused = playing && R.paused;
   if (playing) setPause(true);
-  openModal({
+  const m = openModal({
     title: '📖 Cách chơi',
-    body: `<ol class="howto">
-      <li><b>🎴 ${CARD_COPY.app}:</b> ${CARD_COPY.help}</li>
-       <li><b>🚪 Đón khách:</b> nhân viên tự dẫn khách vào máy đúng hạng, sạch và hoạt động tốt. Nhân viên đã đào tạo tự nạp đúng giờ khách yêu cầu; người chưa đào tạo vẫn chuyển quầy cho bạn giữ nút hoặc giữ Space. Nếu chỉ còn máy khác nhu cầu, nhân viên hỏi ý bạn trước khi dẫn khách vào.</li>
-      <li><b>🧘 Nhịp quán:</b> khách tới thưa hơn khi còn nhiều việc chờ xử lý; sau mẹ gank, trộm hoặc công an có khoảng nghỉ đón khách. Nút <i>🦹 Bắt trộm</i>, <i>📢 Nhắc máy</i> và <i>🌙 Đóng cửa</i> nằm dưới cảnh quán, luôn hiện cả khi mở quầy. Việc khẩn cấp trả tua nhanh về ×1; hộp thoại nhắc khách ồn tạm dừng để bạn chọn.</li>
-      <li><b>🏠 Về tiêu đề:</b> quay về màn Chơi tiếp / Chơi mới. Ca đang mở sẽ tạm dừng trong tab này; Chơi tiếp trở lại đúng ca. Tải lại hoặc đóng tab chỉ giữ mốc lưu buổi sáng.</li>
-      <li><b>🖥️ Máy tính chủ:</b> bấm màn hình ở quầy hoặc nút Máy chủ để mở Bảng tin phố, Đánh giá, Ngân hàng, Vay nóng và Tài xỉu. Đọc tin cúp điện, game hot, trend trước khi mở cửa. Đánh giá chưa trả lời ở trên cùng; trả lời nhanh hoặc tự viết tối đa ${C.HOST_REPLY_MAX_LENGTH} ký tự và chọn thái độ. Nháp giữ khi đổi app trong cửa sổ máy chủ; đóng máy chủ bỏ nháp. Rep một lần, không đổi sao cũ; xin lỗi rồi làm tốt ở lần ghé sau mới thêm thiện cảm. Cà khịa làm mất thiện cảm. Quán tạm dừng khi mở máy chủ; trả lời, vay/trả nợ và tự chơi tài xỉu thực hiện buổi sáng.</li>
-      <li><b>🎲 Tài xỉu tiền game:</b> nhập tiền nguyên tùy ý, không giới hạn lượt; 3–10 Tài / 11–18 Xỉu, thắng nhận tổng x${C.HOST_DICE_PAYOUT} gồm vốn. Kết quả lưu trước khi quay. Chơi nhiều/cược lớn tăng nghi ngờ, bị bắt thì phạt theo tiền cao nhất ngày. Trong ca dùng app giới thiệu một lần mỗi khách người lớn; khách có tiền riêng, có thể từ chối hoặc thưởng một phần lãi khi thắng. Giới thiệu bị phát hiện còn đình chỉ 1 ngày, vẫn trả mặt bằng/lãi. Dán bảng cấm chặn khách đặt mới, giải quyết lượt đã cược, không xóa nghi ngờ. Một ngày không cược mới giảm nghi ngờ.</li>
-      <li><b>🎮 Game:</b> quán chưa cài game khách muốn thì khách bỏ đi. Buổi sáng xem game nào đang 🔥 hot và mua thêm game trong <i>Thư viện game</i>.</li>
-      <li><b>⏱️ Nạp giờ:</b> giữ nút để nạp, thả tay ngay vạch vàng. Nạp dư là cho không, nạp thiếu khách sẽ cáu.</li>
-       <li><b>🍜 Gọi đồ:</b> nhân viên nhận đơn ở máy mình phụ trách và quầy bếp tự hiện. Bạn làm món, giữ nút hoặc Space để nấu/rót, rồi giao nhân viên mang ra. Nếu đóng quầy, dùng nút công việc dưới cửa để mở lại. Máy chưa có nhân viên thì bạn tự hỏi khách và mang món.</li>
-       <li><b>🧑‍🍳 Nhân viên:</b> mỗi người phụ trách tối đa 3 máy và tự lau bàn trống. Tuyển, chỉnh lương và training ở tab Hóa đơn mỗi sáng. Lương trả cuối ngày; lương cao và training giúp giảm lỗi ghi đơn.</li>
-      <li><b>🔧 Sự cố:</b> máy treo thì sửa ngay. Khách về rồi thì 🧹 dọn bàn trước khi xếp người mới.</li>
-      <li><b>🏗️ Hạ tầng:</b> thanh dưới đồng hồ cho biết nhiệt độ phòng, mạng và điện. Trời nóng thì bật ❄️ điều hòa (tốn điện). Quán đông quá sức mạng thì khách bị giật lag — nâng gói mạng ở tab <i>Hóa đơn</i>. Cúp điện thì máy tắt: có 🔋 UPS khách kịp lưu game, có 🛢️ máy phát thì bấm nổ máy (tốn xăng). Khách thua hay đập phím, buổi sáng nhớ sửa.</li>
-      <li><b>🧾 Tiền nong:</b> mặt bằng, mạng, điện cộng dồn và chốt hóa đơn mỗi 7 ngày — đủ tiền thì game tự trả khi chốt; thiếu tiền thì trễ hạn bị phạt rồi cắt mạng. Thiếu vốn thì vay ngân hàng (lãi thấp) hoặc vay nóng (lãi cao) ở tab <i>Hóa đơn</i>.</li>
-      <li><b>📒 Kế toán & thuế:</b> chốt sổ mỗi ${C.ACCOUNT_DAYS} ngày, kỳ đầu miễn thuế. Giá vốn ghi khi dùng/bỏ nguyên liệu; đầu tư máy không giảm lãi tính thuế. Tab <i>Hóa đơn</i> cho xem báo cáo, đóng thuế và thuê kế toán ${money(C.ACCOUNT_FEE)}/${C.ACCOUNT_DAYS} ngày để nhắc dự phòng, tự đóng thuế khi bật tùy chọn.</li>
-      <li><b>♻️ Đồ thải:</b> hàng bỏ và khay đổ gom riêng ở tab <i>Nhập hàng</i>, giữ ${C.WASTE_KEEP_DAYS} ngày, tối đa ${C.WASTE_CAP} đơn vị. Mỗi ngày một lời chào thu gom; bán ngay hoặc nhờ kế toán trả giá một lần (có thể bị rút lời chào). Có thể đặt giá tối thiểu để nhờ tự bán.</li>
-      <li><b>🙋 Mỗi khách một kiểu:</b> để ý câu chào ở cửa. Khách <i>đang vội</i> chịu chờ ngắn hơn — xếp máy và làm món cho họ trước. Khách <i>ngại bẩn</i> rất khó chịu với bàn bừa và máy treo. Khách <i>tính kỹ</i> để ý từng phút nạp giờ. Trưa hay có dân văn phòng, chiều có học sinh, tối có game thủ đi rank.</li>
-      <li><b>📢 Khách ồn ào:</b> có khách hay hát hò, la hét làm khách ngồi cùng hàng máy khó chịu. Thấy 📢 trên máy thì bấm vào: <i>nhắc nhở</i> (đa số chịu nhỏ tiếng, không được thì còn ồn hơn) hoặc <i>mời về</i> (phải trả lại tiền giờ, khách đó chấm sao thấp). Nhân viên cũng tự đi nhắc.</li>
-      <li><b>🦹 Trộm:</b> thỉnh thoảng có kẻ trộm giả làm khách (nạp ít giờ, nói lấp lửng, ngồi một lúc thì lộ 👀). Khi nó gỡ đồ chạy ra cửa, bạn có vài giây để <i>bấm vào máy đó</i> bắt lại. Bắt được thì chọn giao công an (có thưởng), tha (thành khách quen) hay bắt đền. Để thoát thì máy thiếu đồ, sáng mai mua lại. Camera và khóa cáp giúp phòng trộm.</li>
-      <li><b>👩 Mẹ gank:</b> học sinh đang chơi có thể bị phụ huynh tới tìm bất cứ lúc nào trong ngày (thấy điện thoại 📱 rung là sắp tới). <i>Giấu giùm</i> thì được lòng học sinh, nhưng trong quán càng nhiều học sinh càng dễ lộ; lộ sau 21h còn có thể bị báo công an. <i>Chỉ chỗ</i> thì mất khách đó nhưng phụ huynh tin quán.</li>
-      <li><b>📅 Lịch tuần:</b> Thứ 7, Chủ nhật quán đông hơn, học sinh tới cả buổi sáng. Học sinh đổ về lúc tan trường (trưa và chiều). Mỗi tháng có một tuần thi học kỳ: học sinh gần như không ghé, buổi sáng xem thông báo để nhập hàng cho vừa.</li>
-      <li><b>😶 Khách rụt rè:</b> nhân viên sẽ hỏi để biết khách cần máy và muốn gọi món gì. Khi không có nhân viên phụ trách, bấm khách ở cửa hoặc 💭 trên máy để hỏi. Khách khác đang chơi ổn mà bị hỏi nhiều thì thấy phiền.</li>
-      <li><b>📒 Khách quen:</b> khách nhớ quán. Lần trước bực chuyện gì sẽ nhắc ở cửa — lặp lại lỗi cũ thì họ khó chịu gấp rưỡi, làm tốt thì thiện cảm tăng. Xếp đúng ❤️ máy quen cũng được lòng. Bị bỏ bê nhiều lần họ sẽ chuyển quán.</li>
-      <li><b>💬 Nhận xét cuối ngày:</b> xem khách khen gì, chê gì; bấm vào từng khách để biết vì sao họ vui hay bực.</li>
-      <li><b>🛠️ Nâng cấp máy:</b> nâng cả CPU và card đồ họa để lên hạng (Thường → Pre → VIP → Pro Max), khách chơi game nặng và streamer sẽ tìm tới. Chuột, phím, màn hình, bàn ghế xịn làm giá giờ cao hơn và khách vui hơn.</li>
-      <li><b>🌙 Đóng cửa:</b> quán không tự đóng — bạn tự chọn giờ, mở được tới 8h sáng hôm sau. Bấm <i>🌙 Đóng cửa</i> ở khung Cửa quán: <i>chuẩn bị đóng cửa</i> thì không nhận khách mới, khách chơi nốt rồi quán tự đóng; <i>đóng ngay</i> thì phải hoàn tiền giờ chưa chơi. Mở càng khuya càng tốn: từ 18h đèn, biển hiệu tính tiền theo giờ, sau 22h trả thêm lương ca đêm và nhân viên mệt hay ghi sai đơn. Từ 21h có khách xin <i>bao đêm</i> (trả trọn gói, chơi tới 6h).</li>
-      <li><b>👮 Mở quá giờ:</b> từ 23h tới 6h công an có thể ập vào kiểm tra — quán càng đông, có khách ồn hay học sinh thì càng dễ bị báo. Bị bắt là phải đóng cửa ngay; lần đầu cảnh cáo, sau đó phạt tiền, tái phạm nhiều lần bị đình chỉ một ngày. Từ 22h có nút <i>🚪 Kéo cửa cuốn</i>: chỉ khách quen gọi cửa mới vào, đỡ lộ hơn. Quán vắng thì bấm <i>⏩</i> trên cùng để tua nhanh.</li>
-      <li><b>🌙 Cuối ngày:</b> xem thu chi, tiền điện và mặt bằng được ghi vào hóa đơn tuần. Sáng hôm sau nhập hàng (có hạn dùng!), xem dự báo thời tiết, lịch cúp điện và nâng cấp quán.</li>
-      <li><b>☠️ Hàng hết date:</b> hàng cận date rẻ một nửa nhưng mau hết hạn. Hàng hết date vẫn bán được nhưng khách có thể đau bụng rồi báo công an — bị phạt nặng!</li>
-    </ol>
+    body: `${howtoTabs([
+      ['🎮 Cơ bản', [`<b>🚪 Đón khách:</b> nhân viên tự dẫn khách vào máy đúng hạng, sạch và hoạt động tốt. Nhân viên đã đào tạo tự nạp đúng giờ khách yêu cầu; người chưa đào tạo vẫn chuyển quầy cho bạn giữ nút hoặc giữ Space. Nếu chỉ còn máy khác nhu cầu, nhân viên hỏi ý bạn trước khi dẫn khách vào.`,
+        `<b>⏱️ Nạp giờ:</b> giữ nút để nạp, thả tay ngay vạch vàng. Nạp dư là cho không, nạp thiếu khách sẽ cáu.`,
+        `<b>🍜 Gọi đồ:</b> nhân viên nhận đơn ở máy mình phụ trách và quầy bếp tự hiện. Bạn làm món, giữ nút hoặc Space để nấu/rót, rồi giao nhân viên mang ra. Nếu đóng quầy, dùng nút công việc dưới cửa để mở lại. Máy chưa có nhân viên thì bạn tự hỏi khách và mang món.`,
+        `<b>🎮 Game:</b> quán chưa cài game khách muốn thì khách bỏ đi. Buổi sáng xem game nào đang 🔥 hot và mua thêm game trong <i>Thư viện game</i>.`,
+        `<b>🔧 Sự cố:</b> máy treo thì sửa ngay. Khách về rồi thì 🧹 dọn bàn trước khi xếp người mới.`,
+        `<b>🧑‍🍳 Nhân viên:</b> mỗi người phụ trách tối đa 3 máy và tự lau bàn trống. Tuyển, chỉnh lương và training ở tab Hóa đơn mỗi sáng. Lương trả cuối ngày; lương cao và training giúp giảm lỗi ghi đơn.`,
+        `<b>🧘 Nhịp quán:</b> khách tới thưa hơn khi còn nhiều việc chờ xử lý; sau mẹ gank, trộm hoặc công an có khoảng nghỉ đón khách. Nút <i>🦹 Bắt trộm</i>, <i>📢 Nhắc máy</i> và <i>🌙 Đóng cửa</i> nằm dưới cảnh quán, luôn hiện cả khi mở quầy. Việc khẩn cấp trả tua nhanh về ×1; hộp thoại nhắc khách ồn tạm dừng để bạn chọn.`,
+        `<b>🎯 Nhiệm vụ tuần:</b> đầu tab <i>Nhập hàng</i> có ${C.QUEST_COUNT} nhiệm vụ mỗi tuần (Thứ 2 → Chủ nhật), mục tiêu nhích hơn kết quả tuần trước một chút. Kết quả cộng khi đóng cửa, xong là có thưởng ngay; xong hết còn được thưởng thêm. Có kinh doanh thẻ thì gom đủ ${C.CARD_MILESTONES.map(m => m.n).join('/')} mã khác nhau của một bộ để nhận thưởng mốc sưu tầm.`,
+        `<b>🌙 Cuối ngày:</b> xem thu chi, tiền điện và mặt bằng được ghi vào hóa đơn tuần. Sáng hôm sau nhập hàng (có hạn dùng!), xem dự báo thời tiết, lịch cúp điện và nâng cấp quán.`,
+        `<b>🏠 Về tiêu đề:</b> quay về màn Chơi tiếp / Chơi mới. Ca đang mở sẽ tạm dừng trong tab này; Chơi tiếp trở lại đúng ca. Tải lại hoặc đóng tab chỉ giữ mốc lưu buổi sáng.`]],
+      ['🙋 Khách', [`<b>🙋 Mỗi khách một kiểu:</b> để ý câu chào ở cửa. Khách <i>đang vội</i> chịu chờ ngắn hơn — xếp máy và làm món cho họ trước. Khách <i>ngại bẩn</i> rất khó chịu với bàn bừa và máy treo. Khách <i>tính kỹ</i> để ý từng phút nạp giờ. Trưa hay có dân văn phòng, chiều có học sinh, tối có game thủ đi rank.`,
+        `<b>😶 Khách rụt rè:</b> nhân viên sẽ hỏi để biết khách cần máy và muốn gọi món gì. Khi không có nhân viên phụ trách, bấm khách ở cửa hoặc 💭 trên máy để hỏi. Khách khác đang chơi ổn mà bị hỏi nhiều thì thấy phiền.`,
+        `<b>📒 Khách quen:</b> khách nhớ quán. Lần trước bực chuyện gì sẽ nhắc ở cửa — lặp lại lỗi cũ thì họ khó chịu gấp rưỡi, làm tốt thì thiện cảm tăng. Xếp đúng ❤️ máy quen cũng được lòng. Bị bỏ bê nhiều lần họ sẽ chuyển quán.`,
+        `<b>💬 Nhận xét cuối ngày:</b> xem khách khen gì, chê gì; bấm vào từng khách để biết vì sao họ vui hay bực.`,
+        `<b>📢 Khách ồn ào:</b> có khách hay hát hò, la hét làm khách ngồi cùng hàng máy khó chịu. Thấy 📢 trên máy thì bấm vào: <i>nhắc nhở</i> (đa số chịu nhỏ tiếng, không được thì còn ồn hơn) hoặc <i>mời về</i> (phải trả lại tiền giờ, khách đó chấm sao thấp). Nhân viên cũng tự đi nhắc.`,
+        `<b>📅 Lịch tuần:</b> Thứ 7, Chủ nhật quán đông hơn, học sinh tới cả buổi sáng. Học sinh đổ về lúc tan trường (trưa và chiều). Mỗi tháng có một tuần thi học kỳ: học sinh gần như không ghé, buổi sáng xem thông báo để nhập hàng cho vừa.`]],
+      ['💰 Tiền & sổ sách', [`<b>🧾 Tiền nong:</b> mặt bằng, mạng, điện cộng dồn và chốt hóa đơn mỗi 7 ngày — đủ tiền thì game tự trả khi chốt; thiếu tiền thì trễ hạn bị phạt rồi cắt mạng. Thiếu vốn thì vay ngân hàng (lãi thấp) hoặc vay nóng (lãi cao) ở tab <i>Hóa đơn</i>.`,
+        `<b>📒 Kế toán & thuế:</b> chốt sổ mỗi ${C.ACCOUNT_DAYS} ngày, kỳ đầu miễn thuế. Giá vốn ghi khi dùng/bỏ nguyên liệu. Tiền mua máy, linh kiện, nâng cấp, game được khấu hao dần ${C.DEPRECIATION_RATE * 100}%/ngày vào chi phí; kỳ lỗ được trừ vào lãi các kỳ sau. Tab <i>Hóa đơn</i> cho xem báo cáo, đóng thuế và thuê kế toán ${money(C.ACCOUNT_FEE)}/${C.ACCOUNT_DAYS} ngày để nhắc dự phòng, tự đóng thuế khi bật tùy chọn.`,
+        `<b>♻️ Đồ thải:</b> hàng bỏ, khay đổ và linh kiện cũ thay ra (khi nâng cấp hoặc thay phím chuột) gom riêng ở tab <i>Nhập hàng</i>, giữ ${C.WASTE_KEEP_DAYS} ngày, tối đa ${C.WASTE_CAP} đơn vị. Mỗi ngày một lời chào thu gom; bán ngay hoặc nhờ kế toán trả giá một lần (có thể bị rút lời chào). Có thể đặt giá tối thiểu để nhờ tự bán.`,
+        `<b>☠️ Hàng hết date:</b> hàng cận date rẻ một nửa nhưng mau hết hạn. Hàng hết date vẫn bán được nhưng khách có thể đau bụng rồi báo công an — bị phạt nặng!`,
+        `<b>🛠️ Nâng cấp máy:</b> nâng cả CPU và card đồ họa để lên hạng (Thường → Pre → VIP → Pro Max), khách chơi game nặng và streamer sẽ tìm tới. Chuột, phím, màn hình, bàn ghế xịn làm giá giờ cao hơn và khách vui hơn.`,
+        `<b>🏗️ Hạ tầng:</b> thanh dưới đồng hồ cho biết nhiệt độ phòng, mạng và điện. Trời nóng thì bật ❄️ điều hòa (tốn điện). Quán đông quá sức mạng thì khách bị giật lag — nâng gói mạng ở tab <i>Hóa đơn</i>. Cúp điện thì máy tắt: có 🔋 UPS khách kịp lưu game, có 🛢️ máy phát thì bấm nổ máy (tốn xăng). Khách thua hay đập phím, buổi sáng nhớ sửa.`]],
+      ['🚨 Rắc rối', [`<b>🦹 Trộm:</b> thỉnh thoảng có kẻ trộm giả làm khách (nạp ít giờ, nói lấp lửng, ngồi một lúc thì lộ 👀). Khi nó gỡ đồ chạy ra cửa, bạn có vài giây để <i>bấm vào máy đó</i> bắt lại. Bắt được thì chọn giao công an (có thưởng), tha (thành khách quen) hay bắt đền. Để thoát thì máy thiếu đồ, sáng mai mua lại. Camera và khóa cáp giúp phòng trộm.`,
+        `<b>👩 Mẹ gank:</b> học sinh đang chơi có thể bị phụ huynh tới tìm bất cứ lúc nào trong ngày (thấy điện thoại 📱 rung là sắp tới). <i>Giấu giùm</i> thì được lòng học sinh, nhưng trong quán càng nhiều học sinh càng dễ lộ; lộ sau 21h còn có thể bị báo công an. <i>Chỉ chỗ</i> thì mất khách đó nhưng phụ huynh tin quán.`,
+        `<b>🌙 Đóng cửa:</b> quán không tự đóng — bạn tự chọn giờ, mở được tới 8h sáng hôm sau. Bấm <i>🌙 Đóng cửa</i> ở khung Cửa quán: <i>chuẩn bị đóng cửa</i> thì không nhận khách mới, khách chơi nốt rồi quán tự đóng; <i>đóng ngay</i> thì phải hoàn tiền giờ chưa chơi. Mở càng khuya càng tốn: từ 18h đèn, biển hiệu tính tiền theo giờ, sau 22h trả thêm lương ca đêm và nhân viên mệt hay ghi sai đơn. Từ 21h có khách xin <i>bao đêm</i> (trả trọn gói, chơi tới 6h).`,
+        `<b>👮 Mở quá giờ:</b> từ 23h tới 6h công an có thể ập vào kiểm tra — quán càng đông, có khách ồn hay học sinh thì càng dễ bị báo. Bị bắt là phải đóng cửa ngay; lần đầu cảnh cáo, sau đó phạt tiền, tái phạm nhiều lần bị đình chỉ một ngày. Từ 22h có nút <i>🚪 Kéo cửa cuốn</i>: chỉ khách quen gọi cửa mới vào, đỡ lộ hơn. Quán vắng thì bấm <i>⏩</i> trên cùng để tua nhanh.`]],
+      ['🖥️ Máy chủ & thẻ', [`<b>🖥️ Máy tính chủ:</b> bấm màn hình ở quầy hoặc nút Máy chủ để mở Bảng tin phố, Đánh giá, Ngân hàng, Vay nóng và Tài xỉu. Đọc tin cúp điện, game hot, trend trước khi mở cửa. Đánh giá chưa trả lời ở trên cùng; trả lời nhanh hoặc tự viết tối đa ${C.HOST_REPLY_MAX_LENGTH} ký tự và chọn thái độ. Nháp giữ khi đổi app trong cửa sổ máy chủ; đóng máy chủ bỏ nháp. Rep một lần, không đổi sao cũ; xin lỗi rồi làm tốt ở lần ghé sau mới thêm thiện cảm. Cà khịa làm mất thiện cảm. Quán tạm dừng khi mở máy chủ; trả lời, vay/trả nợ và tự chơi tài xỉu thực hiện buổi sáng.`,
+        `<b>🎲 Tài xỉu tiền game:</b> nhập tiền nguyên tùy ý, không giới hạn lượt; 3–10 Tài / 11–18 Xỉu, ra bộ ba thì cả hai cửa thua, thắng nhận tổng x${C.HOST_DICE_PAYOUT} gồm vốn. Kết quả lưu trước khi quay. Chơi nhiều/cược lớn tăng nghi ngờ, bị bắt thì phạt theo tiền cao nhất ngày. Trong ca dùng app giới thiệu một lần mỗi khách người lớn; khách có tiền riêng, có thể từ chối hoặc thưởng một phần lãi khi thắng. Giới thiệu bị phát hiện còn đình chỉ 1 ngày, vẫn trả mặt bằng/lãi. Dán bảng cấm chặn khách đặt mới, giải quyết lượt đã cược, không xóa nghi ngờ. Một ngày không cược mới giảm nghi ngờ.`,
+        `<b>🎴 ${CARD_COPY.app}:</b> ${CARD_COPY.help}`]],
+    ])}
     <p class="hint">Khách vui thì cho tip và tăng đánh giá ★ — đánh giá càng cao càng đông khách. Phím tắt: giữ <kbd>Space</kbd> để nạp/nấu, <kbd>Esc</kbd> để đóng.</p>`,
     actions: [{ label: 'Hiểu rồi!', cls: 'primary', onClick: () => closeModal() }],
     onClose: () => { if (playing && !wasPaused && R && !R.over) setPause(false); },
   });
+  bindHowtoTabs(m.card);
+}
+
+// ---------- Cài đặt âm thanh ----------
+// Lưu riêng trên máy này (sfx.js), không nằm trong bản lưu game.
+function openSound() {
+  const playing = R && !R.over;
+  const wasPaused = playing && R.paused;
+  if (playing) setPause(true);
+  const p = SFX.prefs();
+  const row = (key, volKey, label) => `<div class="sound-row"><label><input type="checkbox" data-sound-on="${key}" ${p[key] ? 'checked' : ''}> ${label}</label>
+    <input type="range" min="0" max="100" step="5" value="${Math.round(p[volKey] * 100)}" data-sound-vol="${volKey}" aria-label="Âm lượng ${label.toLowerCase()}">
+    <b data-sound-pct="${volKey}">${Math.round(p[volKey] * 100)}%</b></div>`;
+  const box = openModal({
+    title: '🔊 Âm thanh',
+    body: `${row('music', 'musicVol', 'Nhạc nền')}${row('sfx', 'sfxVol', 'Tiếng hiệu ứng')}
+      <p class="muted small">Cài đặt lưu trên trình duyệt này, không đi theo bản lưu quán.</p>`,
+    actions: [{ label: 'Xong', cls: 'primary', onClick: () => closeModal() }],
+    onClose: () => { if (playing && !wasPaused && R && !R.over) setPause(false); },
+  }).card;
+  box.addEventListener('input', e => {
+    const t = e.target;
+    if (t.dataset.soundOn) SFX.setPrefs({ [t.dataset.soundOn]: t.checked });
+    if (t.dataset.soundVol) {
+      SFX.setPrefs({ [t.dataset.soundVol]: Number(t.value) / 100 });
+      box.querySelector(`[data-sound-pct="${t.dataset.soundVol}"]`).textContent = t.value + '%';
+    }
+  });
+  // thả thanh trượt tiếng hiệu ứng thì kêu thử một tiếng
+  box.addEventListener('change', e => { if (e.target.dataset.soundVol === 'sfxVol' || e.target.dataset.soundOn === 'sfx') SFX.play('coin'); });
 }
 
 // ---------- Chuyển bản lưu giữa hai trang / hai máy ----------
@@ -4774,6 +5050,7 @@ function init() {
   }));
   $('#maps').addEventListener('click', e => { if (e.target.closest('#btn-all-reviews')) openAllReviews(); });
   document.querySelectorAll('[data-action="howto"]').forEach(b => b.addEventListener('click', openHowTo));
+  document.querySelectorAll('[data-action="sound"]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); openSound(); }));
   $('#btn-open').addEventListener('click', startDay);
   $('#prep-costs').addEventListener('click', e => {
     const b = e.target.closest('button');
@@ -4803,6 +5080,13 @@ function init() {
     if (!e.target.matches('[data-auto-tax]') || !accountantActive()) return;
     S.accountant.autoTax = e.target.checked;
     saveGame();
+    renderPrep();
+  });
+  $('#prep-quests').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b || b.disabled || !b.dataset.cardMilestone) return;
+    const got = claimCardMilestones(b.dataset.cardMilestone);
+    if (got) { SFX.play('levelUp'); VFX.burst(b); fx(b, '+' + money(got), 'good'); }
     renderPrep();
   });
   $('#prep-waste').addEventListener('click', e => {

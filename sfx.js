@@ -5,8 +5,12 @@
 'use strict';
 
 const PREF_KEY = 'quan-net-audio-v1';
-let pref = { sfx: true, music: true };
+// sfxVol / musicVol: 0–1, nhân với mức gốc của từng kênh
+let pref = { sfx: true, music: true, sfxVol: 1, musicVol: 1 };
 try { Object.assign(pref, JSON.parse(localStorage.getItem(PREF_KEY)) || {}); } catch (_) { /* dùng mặc định */ }
+const vol = v => Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1;
+pref.sfxVol = vol(pref.sfxVol); pref.musicVol = vol(pref.musicVol);
+const sfxLevel = () => (pref.sfx ? 0.55 * pref.sfxVol : 0);
 const savePref = () => { try { localStorage.setItem(PREF_KEY, JSON.stringify(pref)); } catch (_) { /* bỏ qua */ } };
 
 // Trình duyệt chỉ cho phát tiếng sau lần bấm đầu tiên, nên tạo AudioContext lúc đó
@@ -17,7 +21,7 @@ function ensure() {
   if (!AC) return null;
   ctx = new AC();
   master = ctx.createGain(); master.gain.value = 0.8; master.connect(ctx.destination);
-  sfxBus = ctx.createGain(); sfxBus.gain.value = pref.sfx ? 0.55 : 0; sfxBus.connect(master);
+  sfxBus = ctx.createGain(); sfxBus.gain.value = sfxLevel(); sfxBus.connect(master);
   // musicBus: núm vặn to/nhỏ chung cho nhạc (file hoặc tự chơi)
   musicBus = ctx.createGain(); musicBus.gain.value = 0; musicBus.connect(master);
   // synthBus: nhạc tự chơi đi qua bộ lọc bớt âm cao cho ấm + tiếng vọng nhẹ (delay có hồi tiếp)
@@ -250,7 +254,7 @@ function fadeMusic(to, sec = 0.8) {
   musicBus.gain.linearRampToValueAtTime(to, at + sec);
 }
 let ducked = false;
-const musicLevel = () => (ducked ? 0.25 : 0.6);
+const musicLevel = () => (ducked ? 0.25 : 0.6) * pref.musicVol;
 
 // Có file nhạc (music/nhac-nen.mp3, tạo bằng tools/make-music.cjs) thì phát file lặp liền mạch;
 // chưa tải xong hoặc không có file thì dùng nhạc tự chơi ở trên.
@@ -305,10 +309,10 @@ function setMood(m) { mood = m; }
 function duck(on) { ducked = on; if (musicOn) fadeMusic(musicLevel(), 0.4); }
 
 // ---------- Nút bật/tắt ----------
-// Bấm xoay vòng: 🔊 nhạc + tiếng → 🔉 chỉ tiếng → 🔇 tắt hết
-function mode() { return pref.music ? 'all' : pref.sfx ? 'sfx' : 'off'; }
-const ICON = { all: '🔊', sfx: '🔉', off: '🔇' };
-const LABEL = { all: 'Âm thanh: nhạc + tiếng', sfx: 'Âm thanh: chỉ tiếng, tắt nhạc', off: 'Âm thanh: tắt' };
+// Biểu tượng: 🔊 nhạc + tiếng · 🔉 chỉ tiếng · 🔇 tắt hết. Bấm nút mở cửa sổ Âm thanh trong game.js.
+function mode() { return pref.music && pref.sfx ? 'all' : pref.sfx ? 'sfx' : pref.music ? 'music' : 'off'; }
+const ICON = { all: '🔊', sfx: '🔉', music: '🎵', off: '🔇' };
+const LABEL = { all: 'Âm thanh: nhạc + tiếng', sfx: 'Âm thanh: chỉ tiếng, tắt nhạc', music: 'Âm thanh: chỉ nhạc, tắt tiếng', off: 'Âm thanh: tắt' };
 function renderButtons() {
   document.querySelectorAll('[data-action="sound"]').forEach(b => {
     b.textContent = ICON[mode()];
@@ -316,22 +320,24 @@ function renderButtons() {
     b.setAttribute('aria-label', LABEL[mode()]);
   });
 }
-function cycle() {
-  const m = mode();
-  if (m === 'all') pref = { sfx: true, music: false };
-  else if (m === 'sfx') pref = { sfx: false, music: false };
-  else pref = { sfx: true, music: true };
+// Đổi cài đặt (bật/tắt, âm lượng) từ cửa sổ Âm thanh của game; lưu ngay trên máy này.
+function setPrefs(patch) {
+  const before = pref.music;
+  Object.assign(pref, patch);
+  pref.sfx = !!pref.sfx; pref.music = !!pref.music;
+  pref.sfxVol = vol(pref.sfxVol); pref.musicVol = vol(pref.musicVol);
   savePref();
   ensure();
-  if (ctx) sfxBus.gain.value = pref.sfx ? 0.55 : 0;
-  if (pref.music) startMusic(); else stopMusic();
-  if (pref.sfx) play('click');
+  if (ctx) sfxBus.gain.value = sfxLevel();
+  if (pref.music && !before) startMusic();
+  else if (!pref.music) stopMusic();
+  else if (musicOn) fadeMusic(musicLevel(), 0.2);
   renderButtons();
 }
+const prefs = () => ({ ...pref });
 
 function init() {
   renderButtons();
-  document.querySelectorAll('[data-action="sound"]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); cycle(); }));
   // lần bấm đầu tiên: mở khóa âm thanh và bật nhạc
   const unlock = () => { ensure(); startMusic(); };
   document.addEventListener('pointerdown', unlock, { once: true, capture: true });
@@ -349,5 +355,5 @@ function init() {
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 
-window.SFX = { play: special, cue, loop, stopLoop, setMood, duck };
+window.SFX = { play: special, cue, loop, stopLoop, setMood, duck, prefs, setPrefs };
 })();

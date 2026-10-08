@@ -94,10 +94,13 @@ function frameSVG() {
 function screenSVG(gameId, gameName) {
   const g = genreOf(gameId);
   const safe = String(gameName || '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+  // Không dùng <svg viewBox> lồng: Chromium có lúc tách cảnh có hoạt hình ra lớp riêng ở độ phân giải 64×30
+  // rồi kéo giãn sai chỗ, thành mảng màu nhòe to trên sàn quán. Phóng bằng transform + vùng cắt cho kết quả y hệt.
   return `<g transform="translate(${X} ${Y})">
-    <svg x="${SCR.x}" y="${SCR.y}" width="${SCR.w}" height="${SCR.h}" viewBox="0 0 64 30" preserveAspectRatio="none" shape-rendering="crispEdges" overflow="hidden">
+    <clipPath id="cTvScreen"><rect x="${SCR.x}" y="${SCR.y}" width="${SCR.w}" height="${SCR.h}"/></clipPath>
+    <g clip-path="url(#cTvScreen)"><g transform="translate(${SCR.x} ${SCR.y}) scale(${SCR.w / 64} ${SCR.h / 30})" shape-rendering="crispEdges">
       ${SCENES[g]()}
-    </svg>
+    </g></g>
     <rect x="${SCR.x}" y="${SCR.y + SCR.h}" width="${SCR.w}" height="10" fill="#101218"/>
     <g class="px-live"><rect x="${SCR.x + 2}" y="${SCR.y + SCR.h + 2}" width="22" height="6" rx="1.5" fill="#E2463A"/>
       <text x="${SCR.x + 13}" y="${SCR.y + SCR.h + 7}" text-anchor="middle" font-size="5.5" font-weight="800" fill="#FFFFFF">LIVE</text></g>
