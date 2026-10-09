@@ -978,7 +978,9 @@ function lightsSVG(sx) {
 function morningSVG(name, lines, rates, hot, machines = []) {
   const safe = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const rows = lines.map((l, i) => `<text x="34" y="${155 + i * 29}">${safe(l.name)}</text><text x="243" y="${155 + i * 29}" text-anchor="end">${safe(l.price)}</text>`).join('');
-  const menuHeight = 67 + lines.length * 29;
+  // giá giờ chơi và game hot ghi ở phần dưới bảng phấn, không dán giấy nổi che tường quán
+  const rateTop = 140 + lines.length * 29;   // dưới dòng món cuối 14px
+  const menuHeight = rateTop + 84 - 89;
   const rateParts = rates.split(' · ');
   const rateLines = [rateParts.slice(0, 2).join(' · '), rateParts.slice(2).join(' · ')].filter(Boolean);
   const room = machines.slice(0, 3).map((m, i) => `<g transform="translate(${140 + i * 240} 658)">${stationSVG({ m, i })}</g>`).join('');
@@ -989,10 +991,10 @@ function morningSVG(name, lines, rates, hot, machines = []) {
     <rect x="16" y="89" width="250" height="${menuHeight}" rx="7" fill="url(#gWood)" stroke="#735139" stroke-width="2"/>
     <rect x="24" y="97" width="234" height="${menuHeight - 16}" rx="4" fill="#2F4E43" stroke="#D3AF77"/>
     <g fill="#FFF6E3" class="marker" font-size="24"><text x="141" y="126" text-anchor="middle" font-size="28">Menu hôm nay</text>${rows}</g>
-    <rect x="290" y="170" width="275" height="91" rx="5" fill="#FFF5DA" stroke="#D1B58B" stroke-width="1.5"/>
-    <g fill="#305F50" class="marker" font-size="18">
-      ${rateLines.map((line, i) => `<text x="304" y="${196 + i * 24}">${safe(line)}</text>`).join('')}
-      <text x="304" y="245" font-size="18">HOT: ${safe(hot)}</text>
+    <path d="M36,${rateTop} H246" stroke="#FFF6E3" stroke-opacity=".45" stroke-dasharray="6 5"/>
+    <g fill="#CFE6DA" class="marker" font-size="16">
+      ${rateLines.map((line, i) => `<text x="34" y="${rateTop + 22 + i * 20}">${safe(line)}</text>`).join('')}
+      <text x="34" y="${rateTop + 70}" font-size="18" fill="#FFD27A">🔥 Hot: ${safe(hot)}</text>
     </g>${awningSVG(name)}${frameSVG()}
     <g data-hit="host" role="button" tabindex="0" aria-label="Mở máy tính chủ" class="host-monitor">
       <title>Máy tính chủ · bấm để mở các app</title>

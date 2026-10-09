@@ -370,6 +370,10 @@ const CONFIG = {
   QUEST_REWARD_MAX_MUL: 3,     // thưởng tối đa gấp 3 mức gốc
   QUEST_ALL_BONUS: 50000,      // xong cả 3 nhiệm vụ trong tuần: thưởng thêm (cũng tăng theo tuần)
   QUEST_CLEAN_MIN_SERVED: 5,   // ngày "không ai bỏ về" phải phục vụ ít nhất chừng này khách
+  ONBOARD_REWARD: 30000,       // quà khai trương khi làm xong các bước hướng dẫn (ONBOARD_STEPS)
+  NEWBIE_DAYS: 3,              // mấy ngày đầu của quán mới...
+  NEWBIE_PATIENCE: 1.3,        // ...khách chịu chờ lâu hơn chừng này lần
+  ONBOARD_CLOSE_AT: 21,        // từ giờ này thẻ khai trương nhắc bước đóng cửa trước (nếu chưa làm)
   // Mốc sưu tầm thẻ: số mã khác nhau đang có trong một bộ (40 mã) → tiền thưởng, nhận một lần mỗi bộ
   CARD_MILESTONES: [{ n: 10, reward: 20000 }, { n: 20, reward: 50000 }, { n: 30, reward: 120000 }, { n: 40, reward: 500000 }],
 
@@ -409,6 +413,7 @@ const CONFIG = {
 
   QUEUE_MAX: 5,
   QUEUE_PATIENCE: 28,      // giây thật khách chịu đứng chờ ở cửa
+  COUNTER_DRAIN: 0.35,     // khách đang đứng ở quầy nạp giờ: hao kiên nhẫn chậm còn chừng này lần
   ORDER_PATIENCE: 38,      // giây thật khách chờ đồ ăn
   AC_PATIENCE_BONUS: 1.35,
 
@@ -653,6 +658,20 @@ const QUESTS = [
   { id: 'food', icon: '🍜', text: 'Bán {n} đồ ăn uống', money: true, min: 100000, reward: 30000, round: 5000 },
   { id: 'clean', icon: '🧹', text: '{n} ngày không khách nào bỏ về (mỗi ngày phục vụ ít nhất {served} khách)', min: 2, fixed: true, reward: 45000 },
   { id: 'cards', icon: '🎴', text: 'Bán {n} gói hoặc thẻ cho khách', min: 5, reward: 30000, needs: 'cards' },
+];
+// Ngày khai trương: các bước hướng dẫn hiện trên cảnh quán tới khi làm xong (bản lưu cũ đã qua ngày 1 thì bỏ qua)
+const ONBOARD_STEPS = [
+  { id: 'seat',  icon: '🚪', text: 'Bấm vào khách đang chờ ở cửa, chọn máy rồi giữ nút <b>Giữ để nạp giờ</b>, thả tay ở vạch vàng.' },
+  { id: 'order', icon: '🍜', text: 'Khách gọi món thì hiện phiếu trên máy: bấm vào máy đó, làm món ở quầy rồi mang ra.' },
+  { id: 'clean', icon: '🧹', text: 'Khách về để lại bàn bừa: bấm vào máy có 🧹 để dọn trước khi xếp khách mới.' },
+  { id: 'close', icon: '🌙', text: 'Tối vắng khách thì bấm <b>🌙 Đóng cửa</b> → <i>Chuẩn bị đóng cửa</i>, trước 23h kẻo công an kiểm tra.' },
+];
+// Tính năng mở dần cho ngày đầu đỡ ngợp: từ ngày này mới thấy
+const UNLOCKS = [
+  { id: 'quests', day: 2, icon: '🎯', name: 'Nhiệm vụ tuần', text: 'Đầu tab Nhập hàng: 3 nhiệm vụ mỗi tuần, xong có thưởng.' },
+  { id: 'waste',  day: 3, icon: '♻️', name: 'Kho đồ thải', text: 'Cuối tab Nhập hàng: hàng bỏ, khay đổ, linh kiện cũ gom lại bán cho người thu gom.' },
+  { id: 'cards',  day: 4, icon: '🎴', name: CARD_COPY.app, text: 'App trên máy chủ: mua gói thẻ, trưng thẻ lên kệ để có tác dụng cho quán.' },
+  { id: 'dice',   day: 7, icon: '🎲', name: 'Tài xỉu', text: 'App trên máy chủ: chơi tiền game, chơi nhiều dễ bị công an để ý.' },
 ];
 
 const ACCOUNT_LINES = {

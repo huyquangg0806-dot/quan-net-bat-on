@@ -6,7 +6,7 @@
   <title>Quán Nét Bất Ổn</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Be+Vietnam+Pro:wght@400;600;800&family=Patrick+Hand&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Be+Vietnam+Pro:wght@400;600;800&family=Patrick+Hand&family=VT323&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -35,17 +35,20 @@
   <!-- Buổi sáng: nhập hàng & nâng cấp -->
   <section id="screen-prep" class="screen warm">
     <header class="hud">
-      <button class="btn small" data-action="host">🖥️ Máy chủ</button>
-      <button class="btn ghost small" data-action="title">🏠 Về tiêu đề</button>
-      <button class="btn ghost small" data-action="cloud">☁️ Bản lưu</button>
       <div class="hud-shop"><span class="lbl">🏪 Quán</span>
         <button id="btn-rename" class="shop-btn" title="Đổi tên quán"><b class="shop-name"></b> ✏️</button></div>
+      <button class="icon-btn menu-btn compact-only" data-action="menu" aria-label="Menu">☰</button>
       <div class="hud-item"><span class="lbl">Ngày</span><b id="prep-day"></b></div>
       <div class="hud-item"><span class="lbl">Tiền</span><b id="prep-money"></b></div>
       <div class="hud-item"><span class="lbl">Đánh giá</span><b id="prep-rating"></b></div>
       <div class="hud-spacer"></div>
-      <button class="icon-btn" data-action="sound">🔊</button>
-      <button class="btn ghost small" data-action="howto" aria-label="Cách chơi">?</button>
+      <div class="hud-nav wide-only">
+        <button class="btn small" data-action="host">🖥️ Máy chủ</button>
+        <button class="btn ghost small" data-action="cloud">☁️ Bản lưu</button>
+        <button class="btn ghost small" data-action="title">🏠 Về tiêu đề</button>
+        <button class="icon-btn" data-action="sound">🔊</button>
+        <button class="btn ghost small" data-action="howto" aria-label="Cách chơi">?</button>
+      </div>
     </header>
     <div class="prep-body">
       <div class="pr-morning" id="prep-scene" aria-label="Quán buổi sáng"></div>
@@ -68,9 +71,9 @@
           <h2>Google Maps</h2><div id="maps"></div><h2>Sổ khách quen</h2><div id="regulars"></div>
         </section>
         <section id="pr-bill" class="panel pr-page pr-receipt" role="tabpanel" aria-labelledby="pr-tab-bill" hidden>
-          <div id="prep-accounts"></div>
-          <h2>Nhân viên</h2><p class="hint">Nhân viên đã đào tạo tự nạp giờ. Bạn làm món; nhân viên dẫn khách, nhận đơn và mang đồ ra.</p><div id="prep-staff"></div>
           <h2>Hóa đơn dự kiến</h2><p class="hint">Kiểm tra chi phí và kho trước khi kéo cửa.</p><div id="prep-costs"></div>
+          <h2>Nhân viên</h2><p class="hint">Nhân viên đã đào tạo tự nạp giờ. Bạn làm món; nhân viên dẫn khách, nhận đơn và mang đồ ra.</p><div id="prep-staff"></div>
+          <div id="prep-accounts"></div>
         </section>
       </div>
     </div>
@@ -82,25 +85,27 @@
   <section id="screen-play" class="screen warm">
     <div class="play-col">
       <header class="phud">
-        <div class="ppill">📅 Ngày <b id="hud-day"></b></div>
+        <div class="ppill wide-only">📅 Ngày <b id="hud-day"></b></div>
         <div class="ppill">🕒 <b id="hud-clock"></b></div>
         <div class="phud-sp"></div>
         <div class="ppill">💵 <b id="hud-money"></b></div>
         <div class="ppill">⭐ <b id="hud-rating"></b></div>
-        <button class="icon-btn" data-action="sound">🔊</button>
-        <button class="icon-btn" data-action="howto" aria-label="Cách chơi">?</button>
+        <button class="icon-btn wide-only" data-action="sound">🔊</button>
+        <button class="icon-btn wide-only" data-action="howto" aria-label="Cách chơi">?</button>
         <button id="btn-speed" class="icon-btn speed-btn" aria-label="Tua nhanh">⏩1×</button>
         <button id="btn-pause" class="icon-btn" aria-label="Tạm dừng">⏸</button>
+        <button class="icon-btn menu-btn compact-only" data-action="menu" aria-label="Menu">☰</button>
       </header>
-      <div id="infra" class="infra" aria-label="Hạ tầng: nhiệt độ, điều hòa, mạng, điện"></div>
+      <div id="coach" class="coach" role="status" hidden></div>
       <div class="scene-wrap">
+        <div id="infra" class="infra" aria-label="Hạ tầng: nhiệt độ, điều hòa, mạng, điện"></div>
         <svg id="scene" aria-label="Quán net"></svg>
         <div id="rows" class="rows" hidden></div>
         <div id="pause-overlay">⏸ Tạm dừng — bấm ▶ để chơi tiếp</div>
       </div>
       <div class="play-actions" aria-label="Việc khẩn cấp và đóng cửa">
-        <button class="btn small" data-action="host">🖥️ Máy chủ</button>
-        <button class="btn small ghost" data-action="title">🏠 Về tiêu đề</button>
+        <button class="btn small wide-only" data-action="host">🖥️ Máy chủ</button>
+        <button class="btn small ghost wide-only" data-action="title">🏠 Về tiêu đề</button>
         <button id="btn-catch-thief" class="btn danger" hidden>🦹 Bắt trộm</button>
         <button id="btn-noise" class="btn" hidden>📢 Nhắc khách ồn</button>
         <div class="door-ctl">
@@ -139,6 +144,20 @@
   <script src="vendor/fflate.js"></script>
   <script src="save-code.js"></script>
   <script src="save-transfer.js"></script>
+  <!-- Đồ họa pixel: bảng màu, hình vẽ tay, đổi emoji thành icon -->
+  <script src="pixel.js"></script>
+  <script src="pixel-sprites.js"></script>
+  <script src="pixel-ui.js"></script>
+  <!-- Logic game: thứ tự quan trọng, game-core.js trước, game.js (khởi động) cuối cùng -->
+  <script src="game-core.js"></script>
+  <script src="game-cards.js"></script>
+  <script src="game-host.js"></script>
+  <script src="game-books.js"></script>
+  <script src="game-ui.js"></script>
+  <script src="game-prep.js"></script>
+  <script src="game-events.js"></script>
+  <script src="game-day.js"></script>
+  <script src="game-report.js"></script>
   <script src="game.js"></script>
 </body>
 </html>
