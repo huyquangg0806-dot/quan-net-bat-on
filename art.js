@@ -910,7 +910,6 @@ function wallSVG(priceLines, o = {}) {
     <rect y="${FLOOR_TOP - 64}" width="${VW}" height="64" fill="url(#pWains)"/><rect y="${FLOOR_TOP - 70}" width="${VW}" height="8" fill="#4E8F80"/>
     <rect y="${FLOOR_TOP}" width="${VW}" height="${VH - FLOOR_TOP}" fill="url(#pFloor)"/><rect y="${FLOOR_TOP}" width="${VW}" height="${VH - FLOOR_TOP}" fill="url(#gFloorShade)"/>
     <rect y="${FLOOR_TOP - 4}" width="${VW}" height="6" fill="#527C6A"/>
-    ${roomPaintingSVG()}
     ${pendantSVG(708)}
     ${priceBoardSVG(priceLines)}
     <g transform="translate(318 128)"><circle r="31" fill="#8A5A3B"/><circle r="26" fill="#FFF8E6"/>${ticks}
@@ -929,14 +928,6 @@ function wallSVG(priceLines, o = {}) {
       <text class="baloo" y="7" text-anchor="middle" font-size="16" fill="#FFF3DA">NẠP GIỜ TẠI QUẦY</text>
     </g>
     <g transform="translate(300 ${FLOOR_TOP + 4}) scale(.74)">${dispenserSVG()}</g>`;
-}
-// Tranh chỉ là nền; giá, đồng hồ, đồ nâng cấp và mọi vùng bấm vẫn vẽ riêng.
-// SVG phía dưới giữ cảnh dùng được ngay cả khi ảnh không tải được.
-function roomPaintingSVG() {
-  // Mép sàn của tranh v1 ở pixel 550; ghép hai miền vào đúng FLOOR_TOP của cảnh.
-  const image = '<image href="assets/art/room-painted-v1.jpg" width="1326" height="1186" pointer-events="none" aria-hidden="true"/>';
-  return `<svg width="${VW}" height="${FLOOR_TOP}" viewBox="0 0 1326 550" preserveAspectRatio="none" overflow="hidden" pointer-events="none" aria-hidden="true">${image}</svg>
-    <svg y="${FLOOR_TOP}" width="${VW}" height="${VH - FLOOR_TOP}" viewBox="0 550 1326 636" preserveAspectRatio="none" overflow="hidden" pointer-events="none" aria-hidden="true">${image}</svg>`;
 }
 // Mái hiên sọc + biển hiệu gỗ mang tên quán (chữ tự nhỏ lại khi tên dài)
 function awningSVG(name) {
@@ -974,94 +965,7 @@ function lightsSVG(sx) {
 }
 
 
-// Bảng menu chỉ nhận chữ đã chuẩn bị, không thay đổi dữ liệu quán.
-function morningSVG(name, lines, rates, hot, machines = []) {
-  const safe = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const rows = lines.map((l, i) => `<text x="34" y="${155 + i * 29}">${safe(l.name)}</text><text x="243" y="${155 + i * 29}" text-anchor="end">${safe(l.price)}</text>`).join('');
-  // giá giờ chơi và game hot ghi ở phần dưới bảng phấn, không dán giấy nổi che tường quán
-  const rateTop = 140 + lines.length * 29;   // dưới dòng món cuối 14px
-  const menuHeight = rateTop + 84 - 89;
-  const rateParts = rates.split(' · ');
-  const rateLines = [rateParts.slice(0, 2).join(' · '), rateParts.slice(2).join(' · ')].filter(Boolean);
-  const room = machines.slice(0, 3).map((m, i) => `<g transform="translate(${140 + i * 240} 658)">${stationSVG({ m, i })}</g>`).join('');
-  return scopeSVG(`<svg viewBox="0 0 760 780" role="img" aria-label="Quán và menu buổi sáng">${defsSVG()}${wallSVG([])}
-    <g transform="translate(630 305) scale(.82)">${standingSVG(OWNER_LOOK, { owner: true, mood: 'smile' })}</g>
-    <g transform="translate(-316 -19) scale(.75)">${counterSVG(false)}</g>${room}
-    <g transform="translate(58 665) scale(.62)">${dogSVG(false)}</g>
-    <rect x="16" y="89" width="250" height="${menuHeight}" rx="7" fill="url(#gWood)" stroke="#735139" stroke-width="2"/>
-    <rect x="24" y="97" width="234" height="${menuHeight - 16}" rx="4" fill="#2F4E43" stroke="#D3AF77"/>
-    <g fill="#FFF6E3" class="marker" font-size="24"><text x="141" y="126" text-anchor="middle" font-size="28">Menu hôm nay</text>${rows}</g>
-    <path d="M36,${rateTop} H246" stroke="#FFF6E3" stroke-opacity=".45" stroke-dasharray="6 5"/>
-    <g fill="#CFE6DA" class="marker" font-size="16">
-      ${rateLines.map((line, i) => `<text x="34" y="${rateTop + 22 + i * 20}">${safe(line)}</text>`).join('')}
-      <text x="34" y="${rateTop + 70}" font-size="18" fill="#FFD27A">🔥 Hot: ${safe(hot)}</text>
-    </g>${awningSVG(name)}${frameSVG()}
-    <g data-hit="host" role="button" tabindex="0" aria-label="Mở máy tính chủ" class="host-monitor">
-      <title>Máy tính chủ · bấm để mở các app</title>
-      <rect x="12" y="680" width="736" height="100" rx="12" fill="#FFF9E8" stroke="#B7C9B4" stroke-width="2"/>
-      <rect x="39" y="711" width="55" height="36" rx="4" fill="#3C4944"/><rect x="45" y="716" width="43" height="24" rx="2" fill="#238D80"/>
-      <path d="M66,747 V753 M54,755 H78" stroke="#3C4944" stroke-width="3"/>
-      <text x="119" y="742" font-size="30" font-weight="800" fill="#235D51">Máy chủ</text>
-      <text x="308" y="740" font-size="22" fill="#79644F">Các app quản lý quán</text>
-      <path d="M702,720 L713,730 L702,740" fill="none" stroke="#238D80" stroke-width="3" stroke-linecap="round"/>
-    </g>
-    </svg>`, 'pr-');
-}
-function itemSVG(k) {
-  let shape;
-  switch (k) {
-    case 'mi':
-      shape = `<path d="M7,7 L12,9 L17,7 L22,9 L27,7 L32,9 L37,7 L44,9 V57 L39,55 L34,57 L29,55 L24,57 L19,55 L14,57 L7,55 Z" fill="#D97956"/>
-        <path d="M8,18 H43 V48 H8 Z" fill="#FFF0D1" stroke="none"/><text x="26" y="31" text-anchor="middle" font-size="13" font-weight="800" fill="#694735" stroke="none">MÌ</text>
-        <g transform="translate(26 40) scale(.65)" stroke="none">${bowlSVG()}</g><path d="M12,12 H39 M12,52 H39" stroke="#F1B18B"/>`;
-      break;
-    case 'trung':
-      shape = '<ellipse cx="18" cy="29" rx="11" ry="16" fill="#FFFAEC"/><ellipse cx="34" cy="35" rx="11" ry="16" fill="#EAD2AD"/><path d="M14,20 Q10,25 12,31 M30,26 Q27,30 28,35" stroke="#FFFFFF" stroke-width="3" fill="none"/>';
-      break;
-    case 'xucxich':
-      shape = '<path d="M18,11 L15,5 H36 L33,11 M18,52 L15,59 H36 L33,52" fill="#F1D6B2"/><rect x="16" y="9" width="20" height="46" rx="10" fill="#C97654"/><path d="M20,20 L32,16 M20,33 L32,29 M20,46 L32,42" stroke="#EFBC91" stroke-width="3"/>';
-      break;
-    case 'suoi':
-      shape = '<path d="M20,13 V19 L14,27 V53 Q26,59 38,53 V27 L32,19 V13 Z" fill="#CAE7E2"/><rect x="19" y="7" width="14" height="8" rx="2" fill="#689C9C"/><rect x="14" y="32" width="24" height="14" fill="#FFF6E3" stroke="none"/><path d="M26,34 Q19,41 26,43 Q33,41 26,34 Z" fill="#509D9E" stroke="none"/><path d="M18,26 V30 M18,48 V51" stroke="#FFFFFF" stroke-width="3"/>';
-      break;
-    case 'caphe':
-      shape = '<path d="M12,20 H40 L36,55 H16 Z" fill="#BC8A5D"/><rect x="10" y="15" width="32" height="7" rx="3" fill="#F4E8D0"/><path d="M15,32 H37 L35,45 H17 Z" fill="#FFF0D1" stroke="none"/><ellipse cx="26" cy="39" rx="5" ry="7" fill="#785039" stroke="none" transform="rotate(25 26 39)"/>';
-      break;
-    default:
-      shape = `<rect x="12" y="10" width="28" height="45" rx="7" fill="${k === 'sting' ? '#C76351' : '#C59B4E'}"/><rect x="12" y="25" width="28" height="18" fill="#FFF0D1" stroke="none"/>
-        <text x="26" y="38" text-anchor="middle" font-size="10" font-weight="800" fill="#694735" stroke="none">NET</text><ellipse cx="26" cy="11" rx="13" ry="3" fill="#D7D7C8"/><path d="M18,17 V23" stroke="#FFFFFF" stroke-width="2" opacity=".5"/>`;
-  }
-  return `<svg viewBox="0 0 52 64" aria-hidden="true"><ellipse cx="26" cy="59" rx="18" ry="3" fill="#604B35" opacity=".12"/><g stroke="#896B50" stroke-width="1.5" stroke-linejoin="round">${shape}</g></svg>`;
-}
-
-// Cảnh chào đầu game, chỉ dùng cấu hình minh họa.
-// Mỗi hình có bộ màu riêng để các màn ẩn không tranh ID gradient.
-function scopeSVG(svg, prefix) {
-  return svg.replace(/id="([^"]+)"/g, (_,id) => 'id="'+prefix+id+'"').replace(/url\(#([^)]+)\)/g,(_,id) => 'url(#'+prefix+id+')');
-}
-function previewSVG(m, i, prefix) {
-  return scopeSVG('<svg viewBox="-140 -305 280 325" aria-hidden="true">'+defsSVG()+stationSVG({m,i})+'</svg>',prefix);
-}
-function titleSVG(prices) {
-  const m = {cpu:1,gpu:1,chair:1,mon:1,kb:1,mouse:1};
-  // Nhân vật ở màn chào cố định, không lấy số ngẫu nhiên của luật chơi.
-  const guests = [
-    { ...OWNER_LOOK, style: 'uniform', apron: false, towel: false, shirt: '#F8F3E9', trim: '#617C85', scarf: true, pants: '#465566' },
-    { ...OWNER_LOOK, style: 'hoodie', apron: false, towel: false, shirt: '#568E83', trim: '#3C6B60', hairStyle: 'bob', headset: true, accent: '#F0C875' },
-    { ...OWNER_LOOK, style: 'jersey', apron: false, towel: false, shirt: '#D57856', trim: '#F5D9AE', hairStyle: 'spiky', headset: true, accent: '#238D80', number: '07' },
-  ];
-  return scopeSVG('<svg viewBox="0 0 760 680" role="img" aria-label="Quán nhỏ có máy tính, quầy mì và Cậu Vàng">'+defsSVG()+wallSVG(prices)+
-    '<g transform="translate(630 305) scale(.82)">'+standingSVG(OWNER_LOOK,{owner:true,mood:'smile'})+'</g><g transform="translate(-316 -19) scale(.75)">'+counterSVG(false)+'</g>'+
-    '<g transform="translate(410 370) scale(.72)">'+standingSVG({...guests[0],bag:true,hairStyle:'side'},{mood:'happy',carry:'bowl'})+'</g>'+
-    [140,380,620].map((x,i)=>'<g transform="translate('+x+' 658)">'+stationSVG({m:{...m,cpu:i,gpu:i,mon:i,chair:i},i,cust:{look:guests[i],pose:i===0?'eat':'play'},item:i===0?'bowl':i===1?'cup':null})+'</g>').join('')+
-    '<g transform="translate(60 667) scale(.62)">'+dogSVG(true)+'</g>'+titlePaintingSVG(prices)+awningSVG('Quán Nét Bất Ổn')+'</svg>', 'tt-');
-}
-function titlePaintingSVG(prices) {
-  return `<image href="assets/art/title-painted-v1.jpg" width="${VW}" height="${VH}" preserveAspectRatio="none" pointer-events="none" aria-hidden="true"/>${priceBoardSVG(prices)}`;
-}
 window.ART = {
-  titleSVG, previewSVG,
-  morningSVG, itemSVG,
   VW, VH, FLOOR_TOP, FRONT, shade, tierOf, makeLook, OWNER_LOOK, POSES, DESKS,
   defsSVG, wallSVG, awningSVG, frameSVG, lightsSVG, counterSVG, stoolSVG, plantSVG, dogSVG,
   headSVG, headsetSVG, standingSVG, stationSVG, stationGlowSVG, bowlSVG, cupSVG, trashSVG,

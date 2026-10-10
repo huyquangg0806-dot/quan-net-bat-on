@@ -6,7 +6,7 @@
   <title>Quán Nét Bất Ổn</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Be+Vietnam+Pro:wght@400;600;800&family=Patrick+Hand&family=VT323&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;600;800&family=VT323&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -15,7 +15,7 @@
   <section id="screen-title" class="screen active warm">
     <div class="title-card">
       <div id="title-scene" aria-label="Một góc Quán Nét Bất Ổn"></div><p class="pr-eyebrow">MỘT GÓC PHỐ · MỘT QUÁN QUEN</p>
-      <h1>Quán Nét Bất Ổn</h1>
+      <h1 id="title-logo" aria-label="Quán Nét Bất Ổn">Quán Nét Bất Ổn</h1>
       <p class="tagline">Mở máy, nạp giờ, nấu mì — tự tay điều hành quán net của riêng bạn.</p>
       <div class="title-buttons">
         <button id="btn-continue" class="btn primary big" hidden>Chơi tiếp</button>
@@ -54,7 +54,7 @@
       <div class="pr-morning" id="prep-scene" aria-label="Quán buổi sáng"></div>
       <div class="pr-workbook">
         <nav class="pr-tabs" role="tablist" aria-label="Chuẩn bị buổi sáng">
-          <button id="pr-tab-stock" role="tab" aria-controls="pr-stock" aria-selected="true" tabindex="0" data-prep-tab="stock"><span class="pr-object pr-stock" aria-hidden="true"><svg viewBox="0 0 52 52"><rect x="9" y="5" width="33" height="42" rx="3" fill="#F1CB62"/><path d="M16 5v42" stroke="#A86F45" stroke-width="2"/><path d="M21 17h15m-15 7h15m-15 7h11" stroke="#FFF6E3" stroke-width="3"/><path d="M6 12h7M6 22h7M6 32h7M6 42h7" stroke="#836548" stroke-width="3"/></svg></span>Nhập hàng</button><button id="pr-tab-machines" role="tab" aria-controls="pr-machines" aria-selected="false" tabindex="-1" data-prep-tab="machines"><span class="pr-object pr-machines" aria-hidden="true"><svg viewBox="0 0 52 52"><path d="M7 10l18-4 20 5v34l-20-5-18 4z" fill="#E5D5B0" stroke="#A86F45" stroke-width="2"/><path d="M25 7v33" stroke="#A86F45"/><rect x="10" y="17" width="12" height="10" rx="1" fill="#1FA89A"/><path d="M16 27v4m-5 0h10M30 17h10m-10 6h10m-10 6h7" stroke="#725943" stroke-width="2"/></svg></span>Nâng máy</button><button id="pr-tab-phone" role="tab" aria-controls="pr-phone" aria-selected="false" tabindex="-1" data-prep-tab="phone"><span class="pr-object pr-phone" aria-hidden="true"><svg viewBox="0 0 52 52"><rect x="13" y="3" width="28" height="46" rx="5" fill="#3A2A22"/><rect x="16" y="9" width="22" height="31" rx="2" fill="#B9DACE"/><path d="M21 4h12" stroke="#A86F45"/><circle cx="27" cy="44" r="2" fill="#F3E6CB"/><path d="M19 17h6m4 0h6m-16 8h6m4 0h6m-16 8h6m4 0h6" stroke="#F07A5A" stroke-width="4"/></svg></span>Điện thoại</button><button id="pr-tab-bill" role="tab" aria-controls="pr-bill" aria-selected="false" tabindex="-1" data-prep-tab="bill"><span class="pr-object pr-bill" aria-hidden="true"><svg viewBox="0 0 52 52"><path d="M11 4l4 3 4-3 4 3 4-3 4 3 4-3 4 3v41l-4-3-4 3-4-3-4 3-4-3-4 3-4-3z" fill="#FFFDF4" stroke="#C9B18A" stroke-width="1.5"/><path d="M17 15h16m-16 7h16m-16 7h16m-16 8h10" stroke="#9D8971" stroke-width="2"/></svg></span>Hóa đơn</button>
+          <button id="pr-tab-stock" role="tab" aria-controls="pr-stock" aria-selected="true" tabindex="0" data-prep-tab="stock"><span class="pr-object pr-stock" aria-hidden="true">📦</span>Nhập hàng</button><button id="pr-tab-machines" role="tab" aria-controls="pr-machines" aria-selected="false" tabindex="-1" data-prep-tab="machines"><span class="pr-object pr-machines" aria-hidden="true">🖥️</span>Nâng máy</button><button id="pr-tab-phone" role="tab" aria-controls="pr-phone" aria-selected="false" tabindex="-1" data-prep-tab="phone"><span class="pr-object pr-phone" aria-hidden="true">📱</span>Điện thoại</button><button id="pr-tab-bill" role="tab" aria-controls="pr-bill" aria-selected="false" tabindex="-1" data-prep-tab="bill"><span class="pr-object pr-bill" aria-hidden="true">🧾</span>Hóa đơn</button>
         </nav>
         <section id="pr-stock" class="panel pr-page" role="tabpanel" aria-labelledby="pr-tab-stock">
           <div id="prep-quests"></div>
@@ -131,6 +131,11 @@
   <div id="fx-layer"></div>
 
   <script src="data.js"></script>
+  <!-- Đồ họa pixel: bảng màu, hình vẽ tay, đổi emoji thành icon -->
+  <script src="pixel.js"></script>
+  <script src="pixel-sprites.js"></script>
+  <script src="pixel-ui.js"></script>
+  <script src="pixel-scene.js"></script>
   <script src="sfx.js"></script>
   <script src="vfx.js"></script>
   <script src="art.js"></script>
@@ -144,15 +149,15 @@
   <script src="vendor/fflate.js"></script>
   <script src="save-code.js"></script>
   <script src="save-transfer.js"></script>
-  <!-- Đồ họa pixel: bảng màu, hình vẽ tay, đổi emoji thành icon -->
-  <script src="pixel.js"></script>
-  <script src="pixel-sprites.js"></script>
-  <script src="pixel-ui.js"></script>
   <!-- Logic game: thứ tự quan trọng, game-core.js trước, game.js (khởi động) cuối cùng -->
   <script src="game-core.js"></script>
   <script src="game-cards.js"></script>
   <script src="game-host.js"></script>
   <script src="game-books.js"></script>
+  <script src="game-ledger.js"></script>
+  <script src="game-tax.js"></script>
+  <script src="game-invoice.js"></script>
+  <script src="game-audit.js"></script>
   <script src="game-ui.js"></script>
   <script src="game-prep.js"></script>
   <script src="game-events.js"></script>

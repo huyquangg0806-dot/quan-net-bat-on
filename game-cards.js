@@ -100,7 +100,9 @@ function disenchantCard(id) {
   const card = cardById(id);
   if (hostPlaying() || !card || !cardFree(id)) return 0;
   const ok = cardTransaction(() => {
-    recordBook('materials', takeCardLot(S.cards.owned[id]));
+    const cost = takeCardLot(S.cards.owned[id]);
+    recordBook('materials', cost);
+    post('PXK', `Phân rã thẻ ${card.name} lấy bụi`, [['632', '156', cost]]);
     S.cards.dust += C.CARD_DUST[card.rarity];
   });
   return ok ? C.CARD_DUST[card.rarity] : 0;
@@ -160,6 +162,7 @@ function buyCardPacks(key, qty, quote = null) {
   if (quote && (quote.tick !== cardMarketTick() || quote.buy !== info.buy)) return false;
   return cardTransaction(() => {
     S.money -= info.buy * qty; S.cards.enabled = true;
+    post('PNK', 'Nhập gói thẻ bài', [['156', '1111', info.buy * qty]]);
     S.cards.packs[key].push({ qty, cost: info.buy });
     S.cards.daily.spent += info.buy * qty; S.cards.daily.imported += qty;
   });
@@ -271,6 +274,7 @@ function sellToCardBuyer(c) {
   const ok = cardTransaction(() => {
     const cost = takeCardLot(lots);
     S.money += offer.price; recordBook('revenue', offer.price); recordBook('materials', cost);
+    post('BKBL', 'Bán thẻ bài cho khách', [['1111', '5111', offer.price, 'Doanh thu bán thẻ bài'], ['632', '156', cost, 'Giá vốn thẻ bài']]);
     const daily = S.cards.daily;
     daily.income += offer.price; daily.cost += cost;
     daily[offer.kind === 'pack' ? 'packSales' : 'cardSales']++;

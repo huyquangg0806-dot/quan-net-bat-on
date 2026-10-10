@@ -318,6 +318,7 @@ const ICON = {
   chef: check('chef', ['...kkkkkk...', '..kzzzzzzk..', '.kzzzzzzzzk.', '.kzzzzzzzzk.', '..kzzzzzzk..', '..kllllllk..', '..kSSSSSSk..', '..kSeSSeSk..', '..kSSSSSSk..', '..kSSKKSSk..', '...kkkkkk...', '............']),
   bolt: check('bolt', ['.......kkk..', '......kook..', '.....kook...', '....kook....', '...kooookk..', '..kkkooook..', '....kook....', '...kook.....', '..kook......', '..kok.......', '..kk........', '............']),
   fuel: check('fuel', ['............', '..kkkkkkkk..', '..kRRRRRRk..', '..kEEEEEEk..', '..kRRRRRRk..', '..kRzRRRRk..', '..kRzRRRRk..', '..kEEEEEEk..', '..kRRRRRRk..', '..kRRRRREk..', '..kkkkkkkk..', '............']),
+  scissors: check('scissors', ['.kk.........', 'kRRk........', 'kRkRk.......', '.kRRkk...kk.', '..kkllk.kllk', '....kllkllk.', '.....kLLLk..', '....kllkllk.', '..kkllk.kllk', '.kRRkk...kk.', 'kRkRk.......', 'kRRk........']),
   broom: check('broom', ['.........kk.', '........kWk.', '.......kWk..', '......kWk...', '.....kWk....', '....kWk.....', '..kkkkkk....', '.koooOOk....', 'koooOOOk....', 'kooOOOk.....', 'kkkkkk......', '............']),
   chat: check('chat', ['............', '.kkkkkkkkkk.', 'kzzzzzzzzzzk', 'kzzzzzzzzzzk', 'kzkzzkzzkzzk', 'kzzzzzzzzzzk', 'kzzzzzzzzzzk', '.kkzkkkkkkk.', '..kk........', '............', '............', '............']),
   snow: check('snow', ['.....bb.....', '..b..bb..b..', '...b.bb.b...', '....bbbb....', '.bbbbBBbbbb.', '.bbbbBBbbbb.', '....bbbb....', '...b.bb.b...', '..b..bb..b..', '.....bb.....', '............', '............']),
@@ -357,6 +358,11 @@ const ICON = {
   play: check('play', ['............', '..kk........', '..kJk.......', '..kJJk......', '..kJJJk.....', '..kJJJJk....', '..kJJJJk....', '..kJJJk.....', '..kJJk......', '..kJk.......', '..kk........', '............']),
   globe: check('globe', ['...kkkkkk...', '..kbbJJbbk..', '.kbJJJbbbbk.', 'kbbbJbbJJJbk', 'kbbbbbbJJJbk', 'kbbbbbbbJbbk', 'kbJJbbbbbbbk', 'kbJJJbbbbbbk', '.kbJJbbbbbk.', '..kbbbbbbk..', '...kkkkkk...', '............']),
   battery: check('battery', ['............', '............', 'kkkkkkkkkk..', 'kjjjjjjjlkk.', 'kJJJJJJJlklk', 'kJJJJJJJlklk', 'kJJJJJJJlkk.', 'kkkkkkkkkk..', '............', '............', '............', '............']),
+  egg: check('egg', ['............', '....kkkk....', '...kzzzzk...', '..kzzzzzzk..', '..kzzzzzzk..', '.kzzzzzzzlk.', '.kzzzzzzzlk.', '.kzzzzzzllk.', '..kzzzzllk..', '...kllllk...', '....kkkk....', '............']),
+  sausage: check('sausage', ['............', '............', '.......kkk..', '......kTTTk.', '.....kTttTk.', '....kTttTk..', '...kTttTk...', '..kTttTk....', '.kTTTTk.....', '.kkkkk......', '............', '............']),
+  water: check('water', ['....kkkk....', '....kbbk....', '...kkkkkk...', '..kbzbbbbk..', '..kbzbbbbk..', '..kJJJJJJk..', '..kzzzzzzk..', '..kJJJJJJk..', '..kbbbbbbk..', '..kbbbbbBk..', '...kkkkkk...', '............']),
+  coffee: check('coffee', ['...l..l.....', '....l..l....', '...l..l.....', '.kkkkkkkk...', '.kzWWWWzkkk.', '.kzzzzzzk.k.', '.kzzzzzzk.k.', '.kzzzzzzkkk.', '..kzzzzk....', 'kkkkkkkkkk..', '.kllllllk...', '............']),
+  bull: check('bull', ['...kkkkkk...', '..kllllllk..', '..koooooOk..', '..kozoooOk..', '..kRRRRRRk..', '..kRoRRoRk..', '..kRRRRRRk..', '..koooooOk..', '..koooooOk..', '..kllllllk..', '...kkkkkk...', '............']),
   ...FACES,
 };
 const icon = (name, scale = 2) => svg(ICON[name], { scale });

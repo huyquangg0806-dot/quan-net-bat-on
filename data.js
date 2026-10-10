@@ -377,19 +377,56 @@ const CONFIG = {
   // Mốc sưu tầm thẻ: số mã khác nhau đang có trong một bộ (40 mã) → tiền thưởng, nhận một lần mỗi bộ
   CARD_MILESTONES: [{ n: 10, reward: 20000 }, { n: 20, reward: 50000 }, { n: 30, reward: 120000 }, { n: 40, reward: 500000 }],
 
-  // Sổ sách, thuế hư cấu và kế toán thuê ngoài
+  // Sổ sách, thuế và kế toán thuê ngoài
   ACCOUNT_DAYS: 5,             // số ngày mỗi kỳ báo cáo
   ACCOUNT_HISTORY: 6,          // số báo cáo gần nhất được giữ
   ACCOUNT_FEE: 60000,          // tiền thuê trả trước cho một hợp đồng 5 ngày
-  TAX_FREE: 500000,            // phần lợi nhuận được miễn mỗi kỳ
-  TAX_UPPER: 1500000,          // từ ngưỡng này trở lên áp dụng bậc cao
-  TAX_RATE: 0.1,
-  TAX_HIGH_RATE: 0.15,
-  TAX_GRACE: 2,               // số ngày được đóng sau khi chốt
-  TAX_LATE_RATE: 0.02,         // phạt mỗi ngày trễ, theo thuế gốc
-  TAX_LATE_CAP: 0.2,          // tổng phạt tối đa 20% thuế gốc
+  // Thuế kỳ 5 ngày tính trên doanh thu thuần (5111 + 5113 − 521), lũy tiến từng phần; upTo null = không giới hạn
+  TAX_BRACKETS: [{ upTo: 3000000, rate: 0 }, { upTo: 6000000, rate: 0.03 }, { upTo: 10000000, rate: 0.05 }, { upTo: null, rate: 0.07 }],
+  TAX_GRACE: 2,               // số ngày được khai và đóng sau khi chốt kỳ
+  TAX_LATE_RATE: 0.02,         // phạt chồng mỗi ngày trễ: (thuế gốc + phạt đã cộng) × 2%, không có trần
+  TAX_DECLARE_TOLERANCE: 1000, // ô tờ khai lệch tới mức này vẫn tính là đúng (làm tròn)
+  TAX_DECLARE_REWARD: 10000,   // khai đúng hết các ô: thưởng nhỏ
+  TAX_DECLARE_LATE_FINE: 50000, // quá hạn không nộp tờ khai: phạt, cơ quan thuế tự ấn định số thuế theo sổ
+  TAX_UNDERDECLARE_FINE: 0.2,  // bị phát hiện khai thiếu: phạt 20% số thuế khai thiếu, cộng phạt chồng từ hạn cũ
+  TAX_AUDIT_DAILY: 0.08,       // xác suất mỗi ngày cơ quan thuế đối chiếu ra một tờ khai thiếu (trước khi nhân uy tín, độ lệch)
+  TAX_AUDIT_WINDOW: 20,        // quá số ngày này kể từ khi khai thì không còn bị đối chiếu
+  TAX_TRUST_START: 60,         // điểm uy tín thuế ban đầu (0–100); uy tín thấp dễ bị đối chiếu
+  TAX_TRUST_GOOD: 10,          // khai đúng hết các ô
+  TAX_TRUST_CAUGHT: 30,        // bị phát hiện khai thiếu
+  TAX_TRUST_LATE: 15,          // quá hạn không nộp tờ khai
+  ACCOUNT_ERROR_RATE: 0.25,    // kế toán thuê ngoài điền sai một chỗ trong tờ khai
+  // Hóa đơn bán hàng cho khách xin (game-invoice.js)
+  INVOICE_ASK: { vanphong: 0.35 }, // xác suất khách xin hóa đơn khi về, theo tệp khách
+  INVOICE_ASK_OTHER: 0.04,     // tệp khác (trừ học sinh)
+  INVOICE_MIN: 20000,          // khách tiêu dưới mức này thì không xin hóa đơn
+  INVOICE_LATE_FINE: 50000,    // tới giờ mở cửa hôm sau chưa lập: phạt lập hóa đơn không đúng thời điểm
+  INVOICE_REFUSE_FINE: 100000, // từ chối xuất mà khách báo cơ quan thuế
+  INVOICE_REPORT_RATE: 0.5,    // xác suất khách bị từ chối đi báo
+  INVOICE_ERROR_FINE: 30000,   // hóa đơn sai chưa thay thế mà cơ quan thuế đối chiếu ra
+  INVOICE_AUDIT_DAILY: 0.04,   // xác suất mỗi ngày đối chiếu ra một hóa đơn sai
+  INVOICE_DECLARE_AUDIT_MUL: 3, // khai doanh thu thấp hơn tổng hóa đơn đã xuất: dễ bị đối chiếu gấp bấy nhiêu lần
+  INVOICE_KEEP: 30,            // số hóa đơn gần nhất giữ trong sổ hóa đơn
+  INVOICE_ACCOUNTANT_FEE: 5000, // nhờ kế toán thuê ngoài lập hộ một hóa đơn
+  // Kiểm toán nội bộ: sai phạm cài vào hoạt động quán, người chơi đối chiếu để bắt (game-audit.js)
+  AUDIT_DISHONEST_RATE: 0.3,   // tỷ lệ nhân viên có tật gian (cố định theo từng người)
+  AUDIT_SKIM_RATE: 0.25,       // mỗi ngày nhân viên gian (đã training, tự nạp giờ) ăn bớt tiền giờ
+  AUDIT_SKIM_SHARE: 0.08,      // phần tiền giờ trong ngày bị giữ lại
+  AUDIT_THEFT_RATE: 0.2,       // mỗi ngày nhân viên gian lấy 1–3 món trong kho
+  AUDIT_BREAK_RATE: 0.12,      // mỗi ngày rơi vỡ một chai nước mà không ai báo (hao hụt tự nhiên)
+  AUDIT_SUPPLIER_SHORT: 0.12,  // mỗi lần nhập hàng, nhà cung cấp giao thiếu 1–2 món mà hóa đơn vẫn ghi đủ
+  AUDIT_SUPPLIER_OVER: 0.1,    // mỗi lần nhập hàng, hóa đơn tính cao hơn báo giá
+  AUDIT_OVER_SHARE: 0.15,      // phần tính dư trên hóa đơn
+  AUDIT_BOOK_ERROR_RATE: 0.2,  // mỗi ngày có kế toán thuê ngoài, ghi sai một chứng từ (trùng, sai tài khoản, sai số tiền)
+  AUDIT_BOOK_REFUND: 10000,    // bắt được sai sót, kế toán dịch vụ bồi thường
+  AUDIT_WAGE_GRUDGE: 5000,     // tố oan nhân viên: cả nhóm đòi tăng lương mỗi người chừng này
+  AUDIT_MARKUP: 0.1,           // tố oan nhà cung cấp: họ tăng báo giá chừng này
+  AUDIT_MARKUP_DAYS: 3,        // trong chừng này ngày
+  AUDIT_LOG_DAYS: 10,          // số ngày giữ log máy chủ và hóa đơn mua vào
   DEPRECIATION_RATE: 0.02,     // mỗi ngày khấu hao 2% giá trị tài sản còn lại (máy, linh kiện, nâng cấp, game)
   DEPRECIATION_MIN: 1000,      // giá trị còn lại dưới mức này thì khấu hao nốt
+  // Sổ kép theo Thông tư 99/2025/TT-BTC (game-ledger.js)
+  LEDGER_KEEP_DAYS: 10,        // số ngày gần nhất giữ đủ từng bút toán trong Nhật ký chung (cũ hơn chỉ giữ số dư)
 
   // Kho đồ thải: thu hồi một phần nhỏ giá vốn, không phục vụ lại cho khách
   WASTE_CAP: 100,             // số đơn vị kho giữ được
@@ -671,7 +708,110 @@ const UNLOCKS = [
   { id: 'quests', day: 2, icon: '🎯', name: 'Nhiệm vụ tuần', text: 'Đầu tab Nhập hàng: 3 nhiệm vụ mỗi tuần, xong có thưởng.' },
   { id: 'waste',  day: 3, icon: '♻️', name: 'Kho đồ thải', text: 'Cuối tab Nhập hàng: hàng bỏ, khay đổ, linh kiện cũ gom lại bán cho người thu gom.' },
   { id: 'cards',  day: 4, icon: '🎴', name: CARD_COPY.app, text: 'App trên máy chủ: mua gói thẻ, trưng thẻ lên kệ để có tác dụng cho quán.' },
+  { id: 'taxform', day: 6, icon: '🧾', name: 'Tờ khai thuế', text: 'Tab Hóa đơn → Sổ sách & thuế: hết mỗi kỳ 5 ngày tự khai doanh thu và thuế theo sổ (hoặc nhờ kế toán), khai sai dễ bị truy thu.' },
+  { id: 'invoice', day: 8, icon: '📄', name: 'Hóa đơn cho khách', text: 'Khách văn phòng hay xin hóa đơn công ty. Sáng hôm sau lập ở tab Hóa đơn trước khi mở cửa, nhớ viết số tiền bằng chữ.' },
+  { id: 'audit', day: 9, icon: '🔎', name: 'Kiểm toán nội bộ', text: 'Tab Hóa đơn → Sổ sách & thuế: đối chiếu log máy chủ, kiểm kê kho, soát hóa đơn mua vào, rà sổ tìm sai sót. Từ giờ trong quán có thể có gian lận.' },
   { id: 'dice',   day: 7, icon: '🎲', name: 'Tài xỉu', text: 'App trên máy chủ: chơi tiền game, chơi nhiều dễ bị công an để ý.' },
+];
+
+// ---------- Hệ thống tài khoản theo Thông tư 99/2025/TT-BTC (tập con dùng cho quán net) ----------
+// Tên tài khoản theo tài liệu thực hành TT99 của chủ dự án. Giá trong game thu nhỏ nên máy, dụng cụ vẫn ghi là TSCĐ.
+// both: tài khoản lưỡng tính, số dư Nợ trình bày bên tài sản, số dư Có bên nợ phải trả.
+const ACCOUNTS = {
+  '1111': { name: 'Tiền Việt Nam (tiền mặt)' },
+  '1381': { name: 'Tài sản thiếu chờ xử lý' },
+  '1388': { name: 'Phải thu khác', both: true },
+  '152':  { name: 'Nguyên liệu, vật liệu' },
+  '156':  { name: 'Hàng hóa' },
+  '242':  { name: 'Chi phí trả trước' },
+  '2112': { name: 'Máy móc, thiết bị' },
+  '2113': { name: 'Phương tiện vận tải, truyền dẫn' },
+  '2118': { name: 'TSCĐ hữu hình khác' },
+  '2135': { name: 'Chương trình phần mềm' },
+  '2141': { name: 'Hao mòn TSCĐ hữu hình' },
+  '2143': { name: 'Hao mòn TSCĐ vô hình' },
+  '331':  { name: 'Phải trả cho người bán' },
+  '3334': { name: 'Thuế thu nhập doanh nghiệp' },
+  '3339': { name: 'Phí, lệ phí và các khoản phải nộp khác' },
+  '334':  { name: 'Phải trả người lao động' },
+  '335':  { name: 'Chi phí phải trả' },
+  '3411': { name: 'Các khoản đi vay' },
+  '4111': { name: 'Vốn góp của chủ sở hữu' },
+  '4211': { name: 'LNST chưa phân phối lũy kế đến cuối kỳ trước' },
+  '4212': { name: 'LNST chưa phân phối kỳ này' },
+  '5111': { name: 'Doanh thu bán hàng hóa' },
+  '5113': { name: 'Doanh thu cung cấp dịch vụ' },
+  '521':  { name: 'Các khoản giảm trừ doanh thu' },
+  '632':  { name: 'Giá vốn hàng bán' },
+  '635':  { name: 'Chi phí tài chính' },
+  '641':  { name: 'Chi phí bán hàng' },
+  '642':  { name: 'Chi phí quản lý doanh nghiệp' },
+  '711':  { name: 'Thu nhập khác' },
+  '811':  { name: 'Chi phí khác' },
+  '821':  { name: 'Chi phí thuế TNDN' },
+  '911':  { name: 'Xác định kết quả kinh doanh' },
+};
+// Tờ khai thuế kỳ: [khóa, số chỉ tiêu, tên]. Ô thuế từng bậc sinh từ CONFIG.TAX_BRACKETS trong game-ledger.js.
+const TAX_FORM_LINES = [
+  ['s5111', '[01]', 'Doanh thu bán hàng hóa (TK 5111)'], ['s5113', '[02]', 'Doanh thu cung cấp dịch vụ (TK 5113)'],
+  ['s521', '[03]', 'Các khoản giảm trừ doanh thu (TK 521)'], ['net', '[04]', 'Doanh thu thuần chịu thuế = [01] + [02] − [03]'],
+];
+// ---------- Hóa đơn bán hàng (game-invoice.js) ----------
+// Quán chưa đăng ký nộp thuế GTGT theo phương pháp khấu trừ nên dùng hóa đơn bán hàng (ký hiệu mẫu số 2), không có dòng thuế GTGT.
+const INVOICE_SELLER = { mst: '0319260806', series: '2C26TQN' };   // mã số thuế quán (hư cấu), ký hiệu hóa đơn
+// Đơn vị mua (tên, mã số thuế, địa chỉ đều hư cấu)
+const INVOICE_BUYERS = [
+  { name: 'Công ty TNHH Phần mềm Mây Xanh', mst: '0315874210', addr: '12 Nguyễn Thị Minh Khai, Phường Bến Nghé, TP.HCM' },
+  { name: 'Công ty Cổ phần Truyền thông Sao Sáng', mst: '0108452369', addr: '45 Trần Duy Hưng, Phường Trung Hòa, Hà Nội' },
+  { name: 'Công ty TNHH Dịch vụ Kế toán Minh Bạch', mst: '0312093847', addr: '88 Lê Văn Sỹ, Phường 11, TP.HCM' },
+  { name: 'Công ty TNHH Thiết kế Đồ họa Bút Chì', mst: '0316620594', addr: '7 Phan Xích Long, Phường 2, TP.HCM' },
+  { name: 'Công ty Cổ phần Esport Rồng Lửa', mst: '0317345128', addr: '210 Cộng Hòa, Phường 13, TP.HCM' },
+  { name: 'Công ty TNHH Giao nhận Nhanh Như Chớp', mst: '0314908276', addr: '33 Quang Trung, Phường 10, TP.HCM' },
+  { name: 'Công ty TNHH Tư vấn Thuế Ngay Thẳng', mst: '0311567093', addr: '5 Võ Văn Tần, Phường 6, TP.HCM' },
+  { name: 'Công ty Cổ phần Bất động sản Nhà Mơ', mst: '0109731542', addr: '19 Kim Mã, Phường Kim Mã, Hà Nội' },
+];
+// Loại chứng từ (đặt số như tài liệu: PNK 003/05 = phiếu nhập kho thứ 3 của ngày 5)
+const VOUCHERS = {
+  PT: 'Phiếu thu', PC: 'Phiếu chi', PNK: 'Phiếu nhập kho', PXK: 'Phiếu xuất kho', PKT: 'Phiếu kế toán',
+  BKBL: 'Bảng kê bán lẻ hàng hóa, dịch vụ', KC: 'Phiếu kết chuyển',
+};
+// B02-DN: [mã số, chỉ tiêu]; số liệu tính trong game-ledger.js
+const B02_LINES = [
+  ['01', '1. Doanh thu bán hàng và cung cấp dịch vụ'], ['02', '2. Các khoản giảm trừ doanh thu'],
+  ['10', '3. Doanh thu thuần về bán hàng và cung cấp dịch vụ'], ['11', '4. Giá vốn hàng bán'],
+  ['20', '5. Lợi nhuận gộp về bán hàng và cung cấp dịch vụ'], ['22', '6. Doanh thu hoạt động tài chính'],
+  ['23', '7. Chi phí tài chính'], ['24', '– Trong đó: Chi phí đi vay'], ['25', '8. Chi phí bán hàng'],
+  ['26', '9. Chi phí quản lý doanh nghiệp'], ['30', '10. Lợi nhuận thuần từ hoạt động kinh doanh'],
+  ['31', '11. Thu nhập khác'], ['32', '12. Chi phí khác'], ['40', '13. Lợi nhuận khác'],
+  ['50', '14. Tổng lợi nhuận kế toán trước thuế'], ['51', '15. Chi phí thuế TNDN hiện hành'],
+  ['52', '16. Chi phí thuế TNDN hoãn lại'], ['60', '17. Lợi nhuận sau thuế thu nhập doanh nghiệp'],
+];
+// B01-DN: [mã số, chỉ tiêu, mức thụt]; dòng tổng in đậm
+const B01_LINES = [
+  ['100', 'A. TÀI SẢN NGẮN HẠN', 0], ['110', 'I. Tiền và các khoản tương đương tiền', 1], ['111', '1. Tiền mặt', 2],
+  ['130', 'II. Các khoản phải thu ngắn hạn', 1], ['140', 'III. Hàng tồn kho', 1], ['160', 'IV. Tài sản ngắn hạn khác', 1],
+  ['200', 'B. TÀI SẢN DÀI HẠN', 0], ['220', 'I. Tài sản cố định', 1], ['222', '1. Nguyên giá', 2], ['223', '2. Giá trị hao mòn lũy kế (*)', 2],
+  ['280', 'TỔNG CỘNG TÀI SẢN', 0],
+  ['300', 'C. NỢ PHẢI TRẢ', 0], ['310', 'I. Nợ ngắn hạn', 1], ['311', '1. Phải trả người bán', 2],
+  ['314', '2. Thuế và các khoản phải nộp Nhà nước', 2], ['315', '3. Phải trả người lao động', 2],
+  ['320', '4. Phải trả ngắn hạn khác', 2], ['321', '5. Vay và nợ thuê tài chính ngắn hạn', 2],
+  ['400', 'D. VỐN CHỦ SỞ HỮU', 0], ['410', 'I. Vốn chủ sở hữu', 1], ['411', '1. Vốn góp của chủ sở hữu', 2],
+  ['421', '2. Lợi nhuận sau thuế chưa phân phối', 2], ['440', 'TỔNG CỘNG NGUỒN VỐN', 0],
+];
+// B03-DN phương pháp trực tiếp: [mã số, chỉ tiêu]
+const B03_LINES = [
+  ['', 'I. LƯU CHUYỂN TIỀN TỪ HOẠT ĐỘNG KINH DOANH'],
+  ['01', '1. Tiền thu bán hàng, cung cấp dịch vụ và doanh thu khác'], ['02', '2. Tiền chi trả người cung cấp hàng hóa và dịch vụ'],
+  ['03', '3. Tiền chi trả người lao động'], ['04', '4. Tiền lãi vay đã trả'], ['05', '5. Thuế thu nhập doanh nghiệp đã nộp'],
+  ['06', '6. Tiền thu khác từ hoạt động kinh doanh'], ['07', '7. Tiền chi khác cho hoạt động kinh doanh'],
+  ['20', 'Lưu chuyển tiền thuần từ hoạt động kinh doanh'],
+  ['', 'II. LƯU CHUYỂN TIỀN TỪ HOẠT ĐỘNG ĐẦU TƯ'],
+  ['21', '1. Tiền chi mua sắm, xây dựng TSCĐ và tài sản dài hạn khác'], ['22', '2. Tiền thu từ thanh lý, nhượng bán TSCĐ'],
+  ['30', 'Lưu chuyển tiền thuần từ hoạt động đầu tư'],
+  ['', 'III. LƯU CHUYỂN TIỀN TỪ HOẠT ĐỘNG TÀI CHÍNH'],
+  ['31', '1. Tiền thu từ nhận vốn góp của chủ sở hữu'], ['33', '2. Tiền thu từ đi vay'], ['34', '3. Tiền trả nợ gốc vay'],
+  ['40', 'Lưu chuyển tiền thuần từ hoạt động tài chính'],
+  ['50', 'Lưu chuyển tiền thuần trong kỳ'], ['60', 'Tiền và tương đương tiền đầu kỳ'], ['70', 'Tiền và tương đương tiền cuối kỳ'],
 ];
 
 const ACCOUNT_LINES = {
@@ -693,9 +833,9 @@ const ITEMS = {
   trung:   { name: 'Trứng',      icon: '🥚', cat: 'topping', pack: 10, packCost: 30000, shelf: 3,  price: 5000 },
   xucxich: { name: 'Xúc xích',   icon: '🌭', cat: 'topping', pack: 5,  packCost: 25000, shelf: 3,  price: 8000,
              unlockCost: 150000, desc: 'Topping cho tô mì, bán thêm 8k.' },
-  sting:   { name: 'Tài Lộc',    icon: '🥤', cat: 'drink',   pack: 6,  packCost: 42000, shelf: 20, price: 12000 },
-  suoi:    { name: 'Nước suối',  icon: '💧', cat: 'drink',   pack: 6,  packCost: 24000, shelf: 30, price: 8000 },
-  coca:    { name: 'Trâu Húc',   icon: '🐃', cat: 'drink',   pack: 6,  packCost: 48000, shelf: 20, price: 15000,
+  sting:   { name: 'Tài Lộc',    icon: '🥤', cat: 'drink', acc: '156', pack: 6,  packCost: 42000, shelf: 20, price: 12000 },
+  suoi:    { name: 'Nước suối',  icon: '💧', cat: 'drink', acc: '156', pack: 6,  packCost: 24000, shelf: 30, price: 8000 },
+  coca:    { name: 'Trâu Húc',   icon: '🐃', cat: 'drink', acc: '156', pack: 6,  packCost: 48000, shelf: 20, price: 15000,
              unlockCost: 100000, desc: 'Nước tăng lực cho dân cày rank đêm, bán 15k.' },
   caphe:   { name: 'Cà phê sữa', icon: '☕', cat: 'drink',   pack: 10, packCost: 50000, shelf: 15, price: 18000,
              unlockCost: 200000, desc: 'Phải rót sữa đúng vạch. Bán 18k.' },

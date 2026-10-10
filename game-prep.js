@@ -7,6 +7,7 @@ function buyMachine() {
   if (S.machines.length >= C.MAX_PCS || S.money < C.PC_COST) return;
   S.money -= C.PC_COST;
   recordBook('investment', C.PC_COST);
+  post('PC', 'Mua máy tính mới', [['2112', '1111', C.PC_COST]]);
   S.machines.push(newMachine());
   SFX.play('coin');
   saveGame();
@@ -20,6 +21,7 @@ function buyPart(i, k) {
   const tierBefore = machineTier(m);
   S.money -= cost;
   recordBook('investment', cost);
+  post('PC', `Nâng cấp ${PARTS[k].name} máy ${i + 1}`, [['2112', '1111', cost]]);
   if (m.missing !== k) addPartWaste(k, lv);   // đồ cũ tháo ra (đồ bị trộm thì không còn gì để thu)
   m[k]++;
   if (m.missing === k) m.missing = null;   // mua đồ mới cấp cao hơn thì khỏi mua lại đồ bị trộm
@@ -39,6 +41,7 @@ function fixWear(i, full) {
   if (m.wear >= 100 || S.money < cost) return;
   S.money -= cost;
   recordBook('operating', cost);
+  post('PC', full ? `Thay phím chuột máy ${i + 1}` : `Sửa tạm phím chuột máy ${i + 1}`, [['642', '1111', cost]]);
   if (full) { addPartWaste('kb', m.kb); addPartWaste('mouse', m.mouse); }
   m.wear = full ? 100 : Math.min(100, m.wear + C.FIX_CHEAP_GAIN);
   saveGame();
@@ -52,18 +55,27 @@ function restockPart(i) {
   if (!m.missing || S.money < cost) return;
   S.money -= cost;
   recordBook('investment', cost);
+  post('PC', `Mua lại ${PARTS[m.missing].name} bị trộm, máy ${i + 1}`, [['2112', '1111', cost]]);
   m.missing = null;
   SFX.play('coin');
   saveGame();
   renderPrep();
 }
 // tiền thu về khi bán máy: một phần tiền mua máy + linh kiện đã nâng
+const machineSpent = m => C.PC_COST + Object.keys(PARTS).reduce((s, k) => s + PARTS[k].cost.slice(1, m[k] + 1).reduce((a, b) => a + b, 0), 0);
 function sellValue(m) {
-  const spent = C.PC_COST + Object.keys(PARTS).reduce((s, k) => s + PARTS[k].cost.slice(1, m[k] + 1).reduce((a, b) => a + b, 0), 0);
-  return round1k(spent * C.SELL_RATIO);
+  return round1k(machineSpent(m) * C.SELL_RATIO);
+}
+// Thanh lý: tiền thu ghi thu nhập khác; ghi giảm nguyên giá máy và phần hao mòn tương ứng, giá trị còn lại vào chi phí khác
+function postMachineSale(m) {
+  const b = ledgerBalances(), pool = balOf(b, '2112', '2113', '2118');
+  const cost = Math.min(machineSpent(m), balOf(b, '2112')), dep = pool > 0 ? Math.round(-balOf(b, '2141') * cost / pool) : 0;
+  post('PKT', 'Thanh lý máy tính', [['1111', '711', sellValue(m), 'Thu tiền thanh lý máy', '22'],
+    ['2141', '2112', dep, 'Ghi giảm hao mòn máy thanh lý'], ['811', '2112', cost - dep, 'Giá trị còn lại máy thanh lý']]);
 }
 function sellMachine(i) {
   if (S.machines.length <= 1) return;
+  postMachineSale(S.machines[i]);
   recordBook('assetSales', sellValue(S.machines[i]));
   S.books.assets -= Math.min(S.books.assets, sellValue(S.machines[i]));
   S.money += sellValue(S.machines[i]);
@@ -107,7 +119,7 @@ function renderMachines() {
         <button class="btn small ghost" data-fix="${i}" ${S.money < C.FIX_CHEAP ? 'disabled' : ''}>🔧 Sửa tạm · ${money(C.FIX_CHEAP)}</button>
         <button class="btn small ghost" data-replace="${i}" ${S.money < replaceCost(m) ? 'disabled' : ''}>🆕 Thay mới · ${money(replaceCost(m))}</button></div>`;
     return `<div class="mc-row" data-mc="${i}">
-      <div class="si mc-picture">${ART.previewSVG(m,i,'mc-'+i+'-')}</div>
+      <div class="si mc-picture">${PSCN.preview(m, i)}</div>
       <div><b>Máy ${i + 1}</b> <span class="chip t${t}">${TIERS[t].short}</span>
         <span class="muted small">${money(machineRate(m))}/giờ</span> ${wearChip(m)}
         <div class="mc-parts">${parts}</div>${fix}${m.missing ? `<div class="mc-fix">
@@ -160,13 +172,15 @@ function machineBodyHTML(i) {
 function machinePreview(i) {
   const m = S.machines[i], after = { ...m }, t = machineTier(m);
   if (t < 4) { after.cpu = Math.max(after.cpu,t); after.gpu = Math.max(after.gpu,t); }
-  const picture = (machine, label) => '<figure>'+ART.previewSVG(machine,i,machine===m?'pr-before-':'pr-after-')+'<figcaption>'+label+'</figcaption></figure>';
+  const picture = (machine, label) => '<figure>'+PSCN.preview(machine,i)+'<figcaption>'+label+'</figcaption></figure>';
   return '<div class="pr-preview">'+picture(m,'Máy hiện tại')+picture(after,t<4?'Sau khi nâng CPU + card lên hạng kế':'Đã đạt hạng cao nhất')+'</div>';
 }
+// Đồ nâng cấp treo tường mà cảnh buổi sáng và cảnh trong ca cùng vẽ
+const decorOf = () => ({ ac: !!S.upgrades.ac, inverter: !!S.upgrades.inverter, ups: !!S.upgrades.ups, net: NET_PLANS.findIndex(p => p.id === S.net) });
 function renderMorning() {
-  const lines = Object.keys(ITEMS).filter(k => S.unlocked[k]).map(k => ({name:ITEMS[k].name,price:money(ITEMS[k].price)}));
-  const rates = Object.values(TIERS).map(t => t.short+' '+money(t.rate)).join(' · ')+' /giờ';
-  $('#prep-scene').innerHTML = ART.morningSVG(S.shopName,lines,rates,GAMES[S.hot].name,S.machines);
+  const lines = Object.keys(ITEMS).filter(k => S.unlocked[k]).map(k => ({name:ITEMS[k].name,price:money(ITEMS[k].price),icon:PXUI.MAP[ITEMS[k].icon]}));
+  const rates = Object.values(TIERS).map((t, i, all) => t.short+' '+money(t.rate)+(i === all.length - 1 ? ' /giờ' : ''));
+  $('#prep-scene').innerHTML = PSCN.morning(S.shopName,lines,rates,GAMES[S.hot].name,S.machines,decorOf());
 }
 function openMachine(i) {
   const body = el('div', 'machine-edit');
@@ -187,10 +201,14 @@ function openMachine(i) {
 }
 function buyStock(k, near) {
   const it = ITEMS[k];
-  const cost = near ? nearCost(k) : it.packCost;
-  if (!S.unlocked[k] || S.money < cost) return;
-  S.money -= cost;
-  addStock(k, it.pack, near ? nearShelf(k) : it.shelf, cost / it.pack);
+  const quote = quotePrice(k, near);
+  if (!S.unlocked[k] || S.money < quote) return;
+  // Sổ ghi theo hóa đơn nhà cung cấp; giao thiếu thì kho thật ít hơn sổ (lộ ra khi kiểm kê)
+  const { paid, short } = supplierDeal(k, near, quote);
+  S.money -= paid;
+  addStock(k, it.pack - short, near ? nearShelf(k) : it.shelf, paid / it.pack);
+  post('PNK', `Nhập kho ${it.name}${near ? ' (hàng cận date)' : ''}`, [[stockAcc(k), '1111', paid]]);
+  if (short) addMissing(k, 'supplier', short, paid - Math.round((it.pack - short) * paid / it.pack));
   saveGame();
   renderPrep();
 }
@@ -312,6 +330,7 @@ function trainStaff(id) {
   if (!p || p.trained || S.money < C.STAFF_TRAIN_COST) return;
   S.money -= C.STAFF_TRAIN_COST;
   recordBook('operating', C.STAFF_TRAIN_COST);
+  post('PC', `Chi phí training ${staffName(p.id)}`, [['641', '1111', C.STAFF_TRAIN_COST]]);
   p.trained = true;
   saveGame(); renderPrep();
 }
@@ -347,7 +366,7 @@ function renderPrep() {
   $('#stock-list').innerHTML = Object.keys(ITEMS).map(k => {
     const it = ITEMS[k];
     if (!S.unlocked[k]) {
-      return `<div class="stock-row locked"><div class="si">${ART.itemSVG(k)}</div>
+      return `<div class="stock-row locked"><div class="si">${PSCN.itemIcon(ITEMS[k].icon)}</div>
         <div><b>${it.name}</b><div class="muted small">🔒 Mở khóa trong phần nâng cấp</div></div><div></div></div>`;
     }
     const chips = S.inv[k].map(b => {
@@ -357,12 +376,12 @@ function renderPrep() {
       const cls = left <= 1 ? 'bad' : left <= 2 ? 'warn' : '';
       return `<span class="chip ${cls}">${b.qty} cái · ${left <= 1 ? 'hết hạn sau hôm nay' : 'còn ' + left + ' ngày'}</span>`;
     }).join('');
-    const exp = expiredCount(k), nc = nearCost(k);
-    return `<div class="stock-row ${exp ? 'has-expired' : ''}"><div class="si">${ART.itemSVG(k)}</div>
+    const exp = expiredCount(k), nc = quotePrice(k, true), pc = quotePrice(k, false);
+    return `<div class="stock-row ${exp ? 'has-expired' : ''}"><div class="si">${PSCN.itemIcon(ITEMS[k].icon)}</div>
       <div><b>${it.name}</b> <span class="muted small">bán ${money(it.price)} · hạn ${it.shelf} ngày</span>
         <div class="chips">${chips || '<span class="chip bad">Hết hàng</span>'}</div></div>
       <div class="stock-btns">
-        <button class="btn small" data-buy="${k}" ${S.money < it.packCost ? 'disabled' : ''}>+${it.pack} · ${money(it.packCost)}</button>
+        <button class="btn small" data-buy="${k}" ${S.money < pc ? 'disabled' : ''}>+${it.pack} · ${money(pc)}</button>
         <button class="btn small ghost near" data-near="${k}" ${S.money < nc ? 'disabled' : ''}
           title="Hàng cận date: rẻ một nửa nhưng chỉ còn ${nearShelf(k)} ngày">🏷️ Cận date ${money(nc)} · ${nearShelf(k)} ngày</button>
         ${exp ? `<button class="btn small ghost danger" data-trash="${k}">🗑️ Bỏ ${exp} hết date</button>` : ''}
@@ -440,6 +459,7 @@ function payBill() {
   const total = dueTotal();
   if (!total || S.money < total) return;
   S.money -= total;
+  post('PC', 'Trả hóa đơn tuần (mặt bằng, mạng, điện)', [['331', '1111', total]]);
   S.dueBill = null;
   S.netCut = false;
   saveGame();
@@ -450,6 +470,7 @@ function autoPayBill(news) {
   const total = dueTotal();
   if (!total || S.money < total) return;
   S.money -= total;
+  post('PC', 'Tự trả hóa đơn tuần (mặt bằng, mạng, điện)', [['331', '1111', total]]);
   S.dueBill = null;
   if (S.netCut) news.push(['note', '📶 Đã trả nợ cước, nhà mạng nối mạng lại.']);
   S.netCut = false;
@@ -468,10 +489,11 @@ function canBorrow(kind, amt) {
 }
 function borrow(kind, amt) {
   if (hostPlaying() || !canBorrow(kind, amt)) return false;
-  const before = { money: S.money, debt: S.loans[kind] };
+  const before = { money: S.money, debt: S.loans[kind], ledger: JSON.stringify(S.ledger) };
   S.loans[kind] += amt;
   S.money += amt;
-  if (saveGame() === false) { S.money = before.money; S.loans[kind] = before.debt; return false; }
+  post('PT', kind === 'bank' ? 'Vay ngân hàng' : 'Vay nóng', [['1111', '3411', amt]]);
+  if (saveGame() === false) { S.money = before.money; S.loans[kind] = before.debt; S.ledger = JSON.parse(before.ledger); return false; }
   renderPrep();
   return true;
 }
@@ -479,11 +501,15 @@ function repay(kind, amt) {
   if (hostPlaying() || !['bank', 'shark'].includes(kind) || !Number.isSafeInteger(amt) || amt < 0) return false;
   const pay = Math.min(amt || S.loans[kind], S.loans[kind], Math.max(0, S.money));
   if (pay <= 0) return false;
-  const before = { money: S.money, debt: S.loans[kind], sharkDays: S.sharkDays };
+  const before = { money: S.money, debt: S.loans[kind], sharkDays: S.sharkDays, ledger: JSON.stringify(S.ledger) };
   S.loans[kind] -= pay;
   S.money -= pay;
+  // trả lãi đã cộng dồn (335) trước, phần còn lại trừ vào nợ gốc (3411)
+  const interest = Math.min(pay, S.ledger.interest[kind]);
+  S.ledger.interest[kind] -= interest;
+  post('PC', kind === 'bank' ? 'Trả nợ vay ngân hàng' : 'Trả nợ vay nóng', [['335', '1111', interest, 'Trả lãi vay'], ['3411', '1111', pay - interest, 'Trả nợ gốc vay']]);
   if (!S.loans.shark) S.sharkDays = 0;
-  if (saveGame() === false) { S.money = before.money; S.loans[kind] = before.debt; S.sharkDays = before.sharkDays; return false; }
+  if (saveGame() === false) { S.money = before.money; S.loans[kind] = before.debt; S.sharkDays = before.sharkDays; S.ledger = JSON.parse(before.ledger); return false; }
   renderPrep();
   return true;
 }
@@ -527,6 +553,7 @@ function changeNet(id) {
   if (S.money < fee) return;
   S.money -= fee;
   recordBook('investment', fee);
+  post('PC', `Lắp đặt đường truyền ${p.name}`, [['2113', '1111', fee]]);
   S.net = id;
   saveGame();
   renderPrep();
@@ -537,6 +564,7 @@ function changeNet(id) {
 // =====================================================================
 function startDay() {
   normalizeCards();
+  const invoiceNotes = invoicesOnOpen();   // hóa đơn khách xin hôm trước mà chưa lập: phạt trước khi mở cửa
   R = {
     time: C.OPEN_HOUR, paused: false, over: false,
     cardSpawnIn: C.CARD_BUYER_START_SECONDS,
@@ -583,6 +611,7 @@ function startDay() {
   VFX.shutter('up');
   log('☀️ Quán mở cửa!');
   if (S.staff.length) log(`🧑‍🍳 ${S.staff.length} nhân viên vào ca, phụ trách tối đa ${S.staff.length * C.STAFF_PCS} máy`);
+  invoiceNotes.forEach(t => log(t));
   if (S.suspendDay === S.day) {   // bị đình chỉ vì mở quá giờ nhiều lần: hôm nay không được mở
     R.suspended = true;
     R.policeAt = null;

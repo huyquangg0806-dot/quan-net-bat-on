@@ -126,6 +126,7 @@ function newGame(shopName) {
   };
   normalizeSave();
   addStock('mi', 10); addStock('trung', 10); addStock('sting', 6); addStock('suoi', 6);
+  openLedger(S.machines.length * C.PC_COST, 'Vốn góp ban đầu bằng tiền, máy và hàng');
 }
 function normalizeSave() {
   S.upgrades = S.upgrades || {};
@@ -189,10 +190,14 @@ function normalizeSave() {
   for (const k in ITEMS) {
     if (S.unlocked[k] == null) S.unlocked[k] = !ITEMS[k].unlockCost;
     if (!Array.isArray(S.inv[k])) S.inv[k] = [];
-    for (const b of S.inv[k]) if (!Number.isFinite(b.unitCost) || b.unitCost < 0) b.unitCost = ITEMS[k].packCost / ITEMS[k].pack;
+    for (const b of S.inv[k]) {
+      if (!Number.isFinite(b.unitCost) || b.unitCost < 0) b.unitCost = ITEMS[k].packCost / ITEMS[k].pack;
+      if (!Number.isSafeInteger(b.val) || b.val < 0) b.val = Math.round(b.qty * b.unitCost);   // bản lưu cũ chưa có giá trị lô
+    }
   }
   normalizeAccounts();
   normalizeHost();
   normalizeCards();
   normalizeQuests();
+  normalizeLedger();   // sau cùng: bút toán số dư đầu kỳ cần đủ kho, thẻ, nợ, thuế
 }

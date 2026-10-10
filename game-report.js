@@ -40,6 +40,7 @@ function endDay() {
     S.gambling.risk = Math.max(0, S.gambling.risk - C.HOST_GAMBLE_DECAY);
     if (!S.gambling.risk) S.gambling.organized = false;
   }
+  S.ledger.at = day;   // bút toán cuối ngày ghi vào ngày vừa mở cửa
   S.day++;
   const books = closeBooks(day, costs);
   S.forecast = clamp(Math.round(S.forecast + rand(-3, 3)), ...C.FORECAST);
@@ -103,11 +104,13 @@ function closeBooks(day, costs) {
     autoPayBill(news);
   }
   let interest = 0;
+  const interestBy = {};
   for (const [k, rate] of [['bank', C.BANK_RATE], ['shark', C.SHARK_RATE]]) {
     if (!S.loans[k]) continue;
     const i = Math.max(1000, round1k(S.loans[k] * rate));
     S.loans[k] += i;
     interest += i;
+    interestBy[k] = i;
   }
   if (S.loans.shark > 0) {
     S.sharkDays++;
@@ -117,7 +120,7 @@ function closeBooks(day, costs) {
     }
   } else S.sharkDays = 0;
   if (evicted) news.push(['bad', '🏚️ Nợ tiền mặt bằng quá lâu, chủ nhà lấy lại mặt bằng.']);
-  return { news, interest, evicted, lateFee };
+  return { news, interest, interestBy, evicted, lateFee };
 }
 
 // ---------- Bảng nhận xét cuối ngày ----------

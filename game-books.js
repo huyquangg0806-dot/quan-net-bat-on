@@ -30,6 +30,7 @@ function buyGame(id) {
   if (!g || S.installed[id] || S.money < g.cost) return;
   S.money -= g.cost;
   recordBook('investment', g.cost);
+  post('PC', `Mua bản quyền game ${g.name}`, [['2135', '1111', g.cost]]);
   S.installed[id] = true;
   saveGame();
   renderPrep();
@@ -45,10 +46,11 @@ const nearShelf = k => Math.max(1, Math.round(ITEMS[k].shelf * C.NEAR_SHELF_RATI
 const nearCost = k => Math.round(ITEMS[k].packCost * (1 - C.NEAR_DISCOUNT) / 1000) * 1000;
 function invCount(k) { return S.inv[k].reduce((s, b) => s + b.qty, 0); }
 function expiredCount(k) { return S.inv[k].reduce((s, b) => s + (daysPast(b) > 0 ? b.qty : 0), 0); }
+// val = giá trị còn lại của lô (đồng chẵn), để tồn kho trên sổ 152/156 khớp từng đồng
 function addStock(k, qty, shelf = ITEMS[k].shelf, unitCost = ITEMS[k].packCost / ITEMS[k].pack) {
-  const exp = S.day + shelf - 1;
+  const exp = S.day + shelf - 1, val = Math.round(qty * unitCost);
   const b = S.inv[k].find(x => x.exp === exp && x.unitCost === unitCost);
-  if (b) b.qty += qty; else S.inv[k].push({ qty, exp, unitCost });
+  if (b) { b.qty += qty; b.val += val; } else S.inv[k].push({ qty, exp, unitCost, val });
   S.inv[k].sort((a, b2) => a.exp - b2.exp);
 }
 // Lấy hàng cũ nhất trước. Trả về số ngày đã quá hạn (0 = còn hạn), hoặc null nếu hết hàng.
@@ -57,6 +59,9 @@ function invTake(k) {
   if (!list.length) return null;
   const past = Math.max(0, daysPast(list[0]));
   recordBook('materials', list[0].unitCost);
+  const cost = list[0].qty === 1 ? list[0].val : Math.round(list[0].val / list[0].qty);
+  list[0].val -= cost;
+  post('PXK', 'Xuất kho bán cho khách', [['632', stockAcc(k), cost, `Giá vốn ${ITEMS[k].name}`]]);
   list[0].qty--;
   if (list[0].qty <= 0) list.shift();
   return past;
@@ -74,8 +79,6 @@ const emptyBook = () => ({ revenue: 0, refunds: 0, materials: 0, operating: 0, i
   salvage: 0, wasteCost: 0, wasteQty: 0, nightCost: 0, leisureIn: 0, leisureOut: 0, gambleTips: 0, gambleFine: 0, rewards: 0, depreciation: 0 });
 const accountantActive = (day = S.day) => day < S.accountant.until;
 const bookProfit = b => b.revenue + b.salvage - b.refunds - b.materials - b.operating - b.depreciation;
-const taxFor = profit => Math.floor(Math.min(Math.max(0, profit - C.TAX_FREE), C.TAX_UPPER - C.TAX_FREE) * C.TAX_RATE
-  + Math.max(0, profit - C.TAX_UPPER) * C.TAX_HIGH_RATE);
 const taxTotal = () => S.taxes.reduce((n, t) => n + t.base + t.fee, 0);
 function normalizeAccounts() {
   // Bản cũ bắt đầu kỳ mới ngay ngày hiện tại; không đoán doanh thu quá khứ.
@@ -97,18 +100,21 @@ function normalizeAccounts() {
     for (const k of Object.keys(emptyBook())) report[k] = nonnegative(report[k]);
     report.profit = bookProfit(report);
     report.tax = nonnegative(report.tax);
-    report.lossUsed = nonnegative(report.lossUsed);
     report.net = report.profit - report.tax;
     return report;
   });
-  // Bản cũ chưa theo dõi tài sản và lỗ chuyển kỳ: bắt đầu từ 0, không đoán khoản đầu tư quá khứ.
+  // Bản cũ chưa theo dõi tài sản: bắt đầu từ 0, không đoán khoản đầu tư quá khứ.
   S.books.assets = nonnegative(S.books.assets);       // giá trị tài sản đầu tư còn lại, chưa khấu hao
-  S.books.lossCarry = nonnegative(S.books.lossCarry); // lỗ các kỳ trước chưa trừ vào lãi chịu thuế
-  S.taxes = (Array.isArray(S.taxes) ? S.taxes : []).filter(t => t && Number.isFinite(t.base) && t.base > 0 && validDay(t.dueDay));
+  // Khoản thuế phải đóng (đã khai hoặc bị ấn định). Phạt chồng không có trần; khoản chỉ còn tiền phạt có gốc 0.
+  S.taxes = (Array.isArray(S.taxes) ? S.taxes : []).filter(t => t && Number.isSafeInteger(t.base) && t.base >= 0 && validDay(t.dueDay));
   for (const t of S.taxes) {
-    t.fee = Math.min(nonnegative(t.fee), Math.floor(t.base * C.TAX_LATE_CAP));
+    t.fee = Math.floor(nonnegative(t.fee));
     t.to = validDay(t.to) ? t.to : S.day;
   }
+  S.taxes = S.taxes.filter(t => t.base + t.fee > 0);
+  normalizeTax();
+  normalizeInvoices();
+  normalizeAudit();
   S.accountant = { until: 0, autoTax: false, minSale: null, ...S.accountant };
   S.accountant.until = Math.floor(nonnegative(S.accountant.until));
   S.accountant.autoTax = !!S.accountant.autoTax;
@@ -132,14 +138,20 @@ function recordBook(key, amount) {
 function hireAccountant() {
   if (accountantActive() || S.money < C.ACCOUNT_FEE || (R && !R.over)) return;
   S.money -= C.ACCOUNT_FEE;
+  post('PC', 'Trả trước phí kế toán thuê ngoài', [['242', '1111', C.ACCOUNT_FEE]]);
   S.accountant.until = S.day + C.ACCOUNT_DAYS;
   saveGame();
   renderPrep();
+}
+function postTaxPaid() {
+  post('PC', 'Nộp thuế vào ngân sách', [['3334', '1111', S.taxes.reduce((n, t) => n + t.base, 0), 'Nộp thuế TNDN'],
+    ['3339', '1111', S.taxes.reduce((n, t) => n + t.fee, 0), 'Nộp tiền phạt chậm nộp thuế']]);
 }
 function payTax() {
   const total = taxTotal();
   if (!total || S.money < total || (R && !R.over)) return false;
   S.money -= total;
+  postTaxPaid();
   S.taxes = [];
   saveGame();
   renderPrep();
@@ -149,10 +161,14 @@ function autoPayTax(day, news) {
   const total = taxTotal();
   if (!accountantActive(day) || !S.accountant.autoTax || !total || S.money < total) return;
   S.money -= total;
+  postTaxPaid();
   S.taxes = [];
   news.push(['note', `✅ Kế toán đã đóng ${money(total)} tiền thuế và phạt trễ (nếu có).`]);
 }
 function finishAccounts(day, led, costs, books) {
+  auditBeforeClose(day, led, costs);
+  ledgerCloseDay(day, led, costs, books);
+  auditAfterClose(day, costs);
   const pending = S.books.pending;
   pending.revenue += led.hours + led.food + led.tips + (led.thiefCash || 0);
   pending.refunds += led.refund + led.closeRefund;
@@ -169,42 +185,40 @@ function finishAccounts(day, led, costs, books) {
   led.wasteQty = pending.wasteQty;
   for (const k in pending) S.books.period[k] += pending[k];
   S.books.days++;
+  accountantFiles(day, books.news);
   autoPayTax(day, books.news);
-  // Mỗi khoản giữ hạn riêng; phạt trên gốc, không phạt chồng lên tiền phạt.
-  for (const t of S.taxes) {
-    const target = Math.floor(t.base * Math.min(C.TAX_LATE_CAP, Math.max(0, day - t.dueDay) * C.TAX_LATE_RATE));
-    if (target > t.fee) books.news.push(['warn', `⏰ Thuế kỳ ngày ${t.to} trễ hạn, cộng ${money(target - t.fee)} tiền phạt.`]);
-    t.fee = Math.max(t.fee, target);
-  }
+  taxDaily(day, books.news);
+  invoiceDaily(day, books.news);
+  if (S.invoices.requests.length) books.news.push(['warn', `📄 Có ${S.invoices.requests.length} hóa đơn chờ lập: vào tab Hóa đơn → Sổ sách & thuế trước khi kéo cửa.`]);
   if (S.books.days >= C.ACCOUNT_DAYS) {
     const report = { ...S.books.period, from: S.books.from, to: day, free: S.books.free };
     report.profit = bookProfit(report);
-    // Lỗ kỳ này để dành trừ vào lãi kỳ sau; kỳ miễn thuế không dùng lỗ cũ để người chơi khỏi thiệt.
-    report.lossUsed = report.free || report.profit <= 0 ? 0 : Math.min(S.books.lossCarry, report.profit);
-    if (report.profit < 0) S.books.lossCarry += -report.profit;
-    S.books.lossCarry -= report.lossUsed;
-    report.tax = report.free ? 0 : taxFor(report.profit - report.lossUsed);
+    // Thuế tính trên doanh thu thuần theo sổ (không trừ chi phí, không chuyển lỗ); người chơi khai trong vài ngày tới
+    report.tax = closeTaxPeriod(report.from, day, report.free, books.news);
     report.net = report.profit - report.tax;
     S.books.reports.unshift(report);
     S.books.reports = S.books.reports.slice(0, C.ACCOUNT_HISTORY);
-    if (report.tax) S.taxes.push({ to: day, base: report.tax, fee: 0, dueDay: S.day + C.TAX_GRACE - 1 });
     books.report = report;
     books.news.push(['note', `📒 Đã chốt sổ ngày ${report.from}–${day}: lãi trước thuế ${money(report.profit)}${report.free ? ' · kỳ đầu miễn thuế' : ` · thuế ${money(report.tax)}`}.`]);
     S.books.from = S.day;
     S.books.days = 0;
     S.books.free = false;
     S.books.period = emptyBook();
+    accountantFiles(day, books.news);
     autoPayTax(day, books.news);
+    ledgerClosePeriod(report.from, day);
   }
   S.books.pending = emptyBook();
+  ledgerEndDay();
 }
 function currentBook() {
   const b = emptyBook();
   for (const k in b) b[k] = S.books.period[k] + S.books.pending[k];
   return b;
 }
-const expectedTax = () => S.books.free ? 0 : taxFor(bookProfit(currentBook()) - S.books.lossCarry);
-const reservedMoney = () => S.bill.rent + S.bill.net + S.bill.power + dueTotal() + taxTotal() + expectedTax();
+// Thuế dự kiến của kỳ đang chạy theo doanh thu đã ghi sổ; thuế kỳ đã chốt mà chưa khai cũng phải để dành
+const expectedTax = () => { if (S.books.free) return 0; const r = ledgerRevenue(); return taxForRevenue(r.s5111 + r.s5113 - r.s521); };
+const reservedMoney = () => S.bill.rent + S.bill.net + S.bill.power + dueTotal() + taxTotal() + pendingTaxTotal() + expectedTax();
 function accountAdvice(b) {
   if (bookProfit(b) < 0) return ACCOUNT_LINES.loss;
   if (b.wasteCost > 0) return ACCOUNT_LINES.waste;
@@ -215,7 +229,7 @@ function reportHTML(b) {
   const row = (name, value) => `<div class="sum-row"><span>${name}</span><b>${money(value)}</b></div>`;
   return `<div class="account-report">${row('Doanh thu sau hoàn tiền', b.revenue + b.salvage - b.refunds)}
     ${row('Giá vốn nguyên liệu và thẻ', b.materials)}${row('Chi phí vận hành', b.operating)}${b.depreciation ? row('Khấu hao tài sản', b.depreciation) : ''}
-    ${row('Lợi nhuận trước thuế', b.profit)}${b.lossUsed ? row('Trừ lỗ kỳ trước', b.lossUsed) : ''}${row(b.free ? 'Thuế (kỳ đầu miễn)' : 'Thuế kỳ này', b.tax)}
+    ${row('Lợi nhuận trước thuế', b.profit)}${row(b.free ? 'Thuế (kỳ đầu miễn)' : 'Thuế kỳ này', b.tax)}
     ${row('Lợi nhuận sau thuế', b.net)}${row('Tiền đầu tư riêng', b.investment)}${row('Thu thanh lý máy riêng', b.assetSales)}
     ${b.leisureOut ? `<p class="muted small">🎲 Giải trí riêng: cược ${money(b.leisureOut)}, nhận ${money(b.leisureIn)}. Không tính vào lãi và thuế kinh doanh.</p>` : ''}
     ${b.gambleTips || b.gambleFine ? `<p class="muted small">🎲 Khách thưởng từ cược: ${money(b.gambleTips)} · phạt cờ bạc: ${money(b.gambleFine)}. Tách khỏi lãi và thuế kinh doanh.</p>` : ''}
@@ -226,26 +240,28 @@ function reportHTML(b) {
 let accountsOpen = false;
 function accountsHTML() {
   const b = currentBook(), active = accountantActive(), latest = S.books.reports[0];
-  return `<details class="account-box account-fold" ${accountsOpen || taxTotal() ? 'open' : ''}><summary><h3>📒 Sổ sách & thuế</h3>
-    <span class="muted small">Lãi đang ghi ${money(bookProfit(b))} · thuế dự kiến ${money(expectedTax())}${taxTotal() ? ` · <b class="bad-text">nợ thuế ${money(taxTotal())}</b>` : ''}</span></summary>
+  return `<details class="account-box account-fold" ${accountsOpen || taxTotal() || S.tax.pending.length || S.invoices.requests.length ? 'open' : ''}><summary><h3>📒 Sổ sách & thuế</h3>
+    <span class="muted small">Lãi đang ghi ${money(bookProfit(b))} · thuế dự kiến ${money(expectedTax())}${taxTotal() ? ` · <b class="bad-text">nợ thuế ${money(taxTotal())}</b>` : ''}${S.invoices.requests.length ? ` · <b class="warn-text">${S.invoices.requests.length} hóa đơn chờ lập</b>` : ''}</span></summary>
+    ${invoiceBoxHTML()}
     <p>Ngày ${S.books.from}–${S.books.from + C.ACCOUNT_DAYS - 1} · chốt sau <b>${C.ACCOUNT_DAYS - S.books.days} ngày</b>${S.books.free ? ' · kỳ đầu miễn thuế' : ''}.</p>
     <div class="sum-row"><span>Lãi trước thuế đang ghi nhận</span><b>${money(bookProfit(b))}</b></div>
-    <div class="sum-row"><span>Thuế dự kiến theo số đã ghi</span><b>${money(expectedTax())}</b></div>
-    ${S.books.lossCarry ? `<div class="sum-row"><span>Lỗ kỳ trước chưa trừ</span><b>${money(S.books.lossCarry)}</b></div>` : ''}
+    <div class="sum-row"><span>Thuế dự kiến theo doanh thu đã ghi</span><b>${money(expectedTax())}</b></div>
     <div class="sum-row"><span>Tài sản đầu tư còn lại</span><b>${money(S.books.assets)}</b></div>
     <div class="sum-row"><span>Dự phòng hóa đơn & thuế</span><b>${money(reservedMoney())}</b></div>
     <div class="sum-row total"><span>Tiền có thể dùng sau dự phòng</span><b>${money(S.money - reservedMoney())}</b></div>
-    <p class="muted small">Số dự phòng chưa gồm tiền gốc vay và chi phí tương lai. Thuế hư cấu: miễn ${money(C.TAX_FREE)} đầu, phần tới ${money(C.TAX_UPPER)} chịu ${C.TAX_RATE * 100}%, phần vượt chịu ${C.TAX_HIGH_RATE * 100}%.</p>
+    <div class="ledger-open">${unlocked('audit') ? '<button class="btn small primary" data-open-audit>🔎 Kiểm toán nội bộ</button>' : ''}${[['b02', '📈 Kết quả kinh doanh'], ['b01', '🏦 Tình hình tài chính'], ['nkc', '📖 Nhật ký chung'], ['cdps', '⚖️ Cân đối phát sinh']]
+      .map(([tab, name]) => `<button class="btn small" data-open-ledger="${tab}">${name}</button>`).join('')}</div>
+    <p class="muted small">Số dự phòng chưa gồm tiền gốc vay và chi phí tương lai.</p>
+    ${taxBoxHTML()}
     ${S.taxes.map(t => `<p class="${S.day > t.dueDay ? 'bad-text' : 'warn-text'}">Thuế kỳ ngày ${t.to}: <b>${money(t.base + t.fee)}</b> · hạn hết ngày ${t.dueDay}${t.fee ? ` · phạt ${money(t.fee)}` : ''}.</p>`).join('')}
     ${taxTotal() ? `<button class="btn small primary" data-pay-tax ${S.money < taxTotal() ? 'disabled' : ''}>Đóng thuế · ${money(taxTotal())}</button>` : '<p class="muted small">Không có thuế đang nợ.</p>'}
-    <p class="muted small">Trễ hạn: ${C.TAX_LATE_RATE * 100}% thuế gốc/ngày, tổng phạt tối đa ${C.TAX_LATE_CAP * 100}%. Không tính phạt chồng.</p>
     <h4>🧮 Kế toán thuê ngoài</h4>
     ${active ? `<p>Hợp đồng còn ${S.accountant.until - S.day} ngày · phí đã trả trước.</p>
       <p class="account-advice">${accountAdvice(latest || b)}</p>`
       : `<p>Thuê ${C.ACCOUNT_DAYS} ngày, trả trước ${money(C.ACCOUNT_FEE)}. Phí tính dần vào chi phí mỗi ngày; không tự gia hạn.</p>
       <button class="btn small" data-hire-accountant ${S.money < C.ACCOUNT_FEE ? 'disabled' : ''}>${S.accountant.until ? 'Gia hạn' : 'Thuê kế toán'} · ${money(C.ACCOUNT_FEE)}</button>`}
-    <label class="account-option"><input type="checkbox" data-auto-tax ${S.accountant.autoTax ? 'checked' : ''} ${active ? '' : 'disabled'}> Nhờ kế toán tự đóng thuế cuối ngày khi đủ tiền</label>
-    <p class="muted small">Tiền vay và trả gốc không tính vào lãi. Đầu tư máy, linh kiện, nâng cấp và game không trừ một lần mà khấu hao ${C.DEPRECIATION_RATE * 100}%/ngày trên giá trị còn lại. Kỳ lỗ được trừ vào lãi các kỳ sau. Giá vốn kho cũ ước theo giá nhập chuẩn.</p>
+    <label class="account-option"><input type="checkbox" data-auto-tax ${S.accountant.autoTax ? 'checked' : ''} ${active ? '' : 'disabled'}> Nhờ kế toán tự nộp tờ khai (bản điền sẵn, không ai soát) và tự đóng thuế cuối ngày khi đủ tiền</label>
+    <p class="muted small">Tiền vay và trả gốc không tính vào lãi. Đầu tư máy, linh kiện, nâng cấp và game không trừ một lần mà khấu hao ${C.DEPRECIATION_RATE * 100}%/ngày trên giá trị còn lại. Thuế tính trên doanh thu nên lỗ không được chuyển kỳ. Giá vốn kho cũ ước theo giá nhập chuẩn.</p>
     ${S.books.reports.map(r => `<details><summary>Báo cáo ngày ${r.from}–${r.to} · sau thuế ${money(r.net)}</summary>${reportHTML(r)}</details>`).join('')}
     </details>`;
 }
@@ -271,6 +287,8 @@ const wasteName = b => b.kind === 'part' ? `${PARTS[b.k].icon} ${PARTS[b.k].leve
 const wasteRatio = kind => kind === 'pack' ? C.WASTE_PACK_RATIO : kind === 'part' ? C.WASTE_PART_RATIO : C.WASTE_COOKED_RATIO;
 function discardStock(k, b) {
   recordBook('materials', b.qty * b.unitCost);
+  post('PXK', 'Xuất hủy hàng hết hạn, hư hỏng', [['632', stockAcc(k), b.val, `Hủy ${ITEMS[k].name}`]]);
+  b.val = 0;
   addWaste(k, b.qty, b.unitCost, 'pack');
 }
 function discardTray(o) {
@@ -302,6 +320,7 @@ function sellWaste() {
   if (lots.length !== q.ids.length) return false;
   S.money += q.price;
   recordBook('salvage', q.price);
+  post('PT', 'Bán đồ thải cho người thu gom', [['1111', '711', q.price]]);
   S.waste.lots = S.waste.lots.filter(b => !q.ids.includes(b.id));
   q.status = 'sold';
   saveGame();
@@ -458,6 +477,7 @@ function ensureQuests() {
 function payReward(n) {
   S.money += n;
   recordBook('rewards', n);
+  post('PT', 'Nhận tiền thưởng nhiệm vụ, mốc sưu tầm', [['1111', '711', n]]);
 }
 // Cuối ngày: cộng kết quả vào tuần, trả thưởng nhiệm vụ vừa xong (ghi vào led.quests cho bảng tổng kết)
 function trackQuests(led) {

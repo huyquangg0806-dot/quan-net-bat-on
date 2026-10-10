@@ -111,6 +111,9 @@ function rollDice(side, bet) {
     const won = diceWon(side, dice);
     const payout = won ? bet * C.HOST_DICE_PAYOUT : 0;
     S.money += payout - bet;
+    // tiền riêng của chủ quán lấy từ két đi chơi: ghi phải thu chủ sở hữu, không phải chi phí của quán
+    post('PC', 'Chủ quán lấy tiền quỹ chơi tài xỉu', [['1388', '1111', bet]]);
+    post('PT', 'Chủ quán nộp lại tiền thắng tài xỉu vào quỹ', [['1111', '1388', payout]]);
     recordBook('leisureIn', payout);
     recordBook('leisureOut', bet);
     S.casino.rounds.push({ dice, total, side, bet, won, payout });
@@ -149,6 +152,7 @@ function catchGambling() {
     g.peak * (organized ? C.HOST_GAMBLE_ORG_RATE : C.HOST_GAMBLE_FINE_RATE)));
   S.money -= fine;
   recordBook('gambleFine', fine);
+  post('PC', 'Nộp phạt hành chính vì tổ chức cờ bạc', [['811', '1111', fine]]);
   g.lastRaidDay = S.day;
   g.lastCase = { day: S.day, fine, organized, peak: g.peak };
   g.risk = 0;
@@ -238,6 +242,7 @@ function settleCustomerGamble(c) {
     g.budget -= tip;
     S.money += tip;
     recordBook('gambleTips', tip);
+    post('PT', 'Khách thưởng chủ quán sau ván cược', [['1111', '711', tip]]);
     R.led.gambleTips += tip;
   } else hit(c, 'gamble', C.HOST_GAMBLE_LOSS_HIT, null, 'Thua cược sau khi chủ quán giới thiệu');
   gamblingPeak();

@@ -49,7 +49,10 @@ function openHowTo() {
         `<b>📅 Lịch tuần:</b> Thứ 7, Chủ nhật quán đông hơn, học sinh tới cả buổi sáng. Học sinh đổ về lúc tan trường (trưa và chiều). Mỗi tháng có một tuần thi học kỳ: học sinh gần như không ghé, buổi sáng xem thông báo để nhập hàng cho vừa.`]],
       ['💰 Tiền & sổ sách', [`<b>🎯 Nhiệm vụ tuần:</b> đầu tab <i>Nhập hàng</i> có ${C.QUEST_COUNT} nhiệm vụ mỗi tuần (Thứ 2 → Chủ nhật), mục tiêu nhích hơn kết quả tuần trước một chút. Kết quả cộng khi đóng cửa, xong là có thưởng ngay; xong hết còn được thưởng thêm. Có kinh doanh thẻ thì gom đủ ${C.CARD_MILESTONES.map(m => m.n).join('/')} mã khác nhau của một bộ để nhận thưởng mốc sưu tầm.`,
         `<b>🧾 Tiền nong:</b> mặt bằng, mạng, điện cộng dồn và chốt hóa đơn mỗi 7 ngày — đủ tiền thì game tự trả khi chốt; thiếu tiền thì trễ hạn bị phạt rồi cắt mạng. Thiếu vốn thì vay ngân hàng (lãi thấp) hoặc vay nóng (lãi cao) ở tab <i>Hóa đơn</i>.`,
-        `<b>📒 Kế toán & thuế:</b> chốt sổ mỗi ${C.ACCOUNT_DAYS} ngày, kỳ đầu miễn thuế. Giá vốn ghi khi dùng/bỏ nguyên liệu. Tiền mua máy, linh kiện, nâng cấp, game được khấu hao dần ${C.DEPRECIATION_RATE * 100}%/ngày vào chi phí; kỳ lỗ được trừ vào lãi các kỳ sau. Tab <i>Hóa đơn</i> cho xem báo cáo, đóng thuế và thuê kế toán ${money(C.ACCOUNT_FEE)}/${C.ACCOUNT_DAYS} ngày để nhắc dự phòng, tự đóng thuế khi bật tùy chọn.`,
+        `<b>📒 Kế toán & thuế:</b> chốt sổ mỗi ${C.ACCOUNT_DAYS} ngày, kỳ đầu miễn thuế. Thuế tính trên doanh thu thuần của kỳ, lũy tiến từng phần: tới ${money(C.TAX_BRACKETS[0].upTo)} không chịu thuế, càng thu nhiều thuế suất càng cao. Hết kỳ phải tự điền <i>tờ khai</i> trong ${C.TAX_GRACE} ngày (số lấy từ sổ cái 5111, 5113, 521) rồi đóng thuế; trễ đóng bị phạt chồng ${Math.round(C.TAX_LATE_RATE * 100)}%/ngày, không khai bị phạt và ấn định. Khai thiếu có thể bị đối chiếu, truy thu kèm phạt; tự khai bổ sung thì nhẹ hơn. Thuê kế toán ${money(C.ACCOUNT_FEE)}/${C.ACCOUNT_DAYS} ngày để được điền sẵn (nhớ soát lại).`,
+        `<b>📄 Hóa đơn:</b> khách văn phòng hay xin hóa đơn công ty khi về. Sáng hôm sau vào tab <i>Hóa đơn → Sổ sách & thuế</i> lập trước khi kéo cửa: chép tên, mã số thuế, địa chỉ từ danh thiếp, tính thành tiền, cộng tiền hàng và viết số tiền bằng chữ. Lập sai thì lập hóa đơn thay thế; chưa lập hoặc từ chối dễ bị phạt.`,
+        `<b>🔎 Kiểm toán nội bộ:</b> từ ngày ${unlockOf('audit').day} trong quán có thể có gian lận: nhân viên ăn bớt tiền giờ hoặc lấy hàng, hàng rơi vỡ, nhà cung cấp giao thiếu hay tính dư, kế toán thuê ngoài ghi sổ sai. Tab <i>Hóa đơn → Sổ sách & thuế → Kiểm toán nội bộ</i>: đối chiếu log máy chủ với bảng kê, kiểm kê kho (chọn 632 / 1381 / 1388), so hóa đơn mua vào với báo giá, lập bút toán điều chỉnh. Bắt đúng thì lấy lại tiền; tố oan thì nhân viên đòi tăng lương, nhà cung cấp tăng giá.`,
+        `<b>📚 Sổ sách TT99:</b> mọi khoản tiền, hàng, máy đều được định khoản Nợ/Có theo Thông tư 99. Tab <i>Hóa đơn → Sổ sách & thuế</i> mở Nhật ký chung, Cân đối phát sinh, B01-DN, B02-DN, B03-DN; bấm chỉ tiêu để xem sổ cái, bấm dòng sổ để xem chứng từ.`,
         `<b>♻️ Đồ thải:</b> hàng bỏ, khay đổ và linh kiện cũ thay ra (khi nâng cấp hoặc thay phím chuột) gom riêng ở tab <i>Nhập hàng</i>, giữ ${C.WASTE_KEEP_DAYS} ngày, tối đa ${C.WASTE_CAP} đơn vị. Mỗi ngày một lời chào thu gom; bán ngay hoặc nhờ kế toán trả giá một lần (có thể bị rút lời chào). Có thể đặt giá tối thiểu để nhờ tự bán.`,
         `<b>☠️ Hàng hết date:</b> hàng cận date rẻ một nửa nhưng mau hết hạn. Hàng hết date vẫn bán được nhưng khách có thể đau bụng rồi báo công an — bị phạt nặng!`,
         `<b>🛠️ Nâng cấp máy:</b> nâng cả CPU và card đồ họa để lên hạng (Thường → Pre → VIP → Pro Max), khách chơi game nặng và streamer sẽ tìm tới. Chuột, phím, màn hình, bàn ghế xịn làm giá giờ cao hơn và khách vui hơn.`,
@@ -299,7 +302,9 @@ function openCloud() {
 
 // ---------- Khởi động ----------
 function init() {
-  $('#title-scene').innerHTML = ART.titleSVG([1,2,3].map(t => [TIERS[t].short,money(TIERS[t].rate)+'/h']));
+  $('#title-scene').innerHTML = PSCN.title([1,2,3].map(t => [TIERS[t].short,money(TIERS[t].rate)+'/h']));
+  // logo chữ pixel vẽ riêng, hai dòng để vừa màn điện thoại
+  $('#title-logo').innerHTML = ['QUÁN NÉT', 'BẤT ỔN'].map(t => PX.img(PX.logo(t), { scale: 3, cls: 'px-logo' })).join('');
   const tabs = [...document.querySelectorAll('[data-prep-tab]')];
   const selectTab = b => tabs.forEach(t => {
     const active = t === b;
@@ -401,6 +406,17 @@ function init() {
     if (!b || b.disabled) return;
     if (b.dataset.hireAccountant != null) hireAccountant();
     else if (b.dataset.payTax != null) payTax();
+    else if (b.dataset.openLedger) openLedgerBook(b.dataset.openLedger);
+    else if (b.dataset.openAudit != null) openAudit();
+    else if (b.dataset.taxForm) openTaxForm(Number(b.dataset.taxForm));
+    else if (b.dataset.taxAmend) amendDeclaration(Number(b.dataset.taxAmend));
+    else if (b.dataset.invoiceForm) openInvoiceForm(Number(b.dataset.invoiceForm));
+    else if (b.dataset.invoiceAccountant) accountantInvoice(Number(b.dataset.invoiceAccountant));
+    else if (b.dataset.invoiceReplace) replaceInvoice(Number(b.dataset.invoiceReplace));
+    else if (b.dataset.invoiceRefuse) {
+      const r = refuseInvoice(Number(b.dataset.invoiceRefuse));
+      if (r) openModal({ title: '📄 Từ chối xuất hóa đơn', body: r.reported ? `<p class="warn">Khách bực mình gọi đường dây nóng của cơ quan thuế. Phạt không xuất hóa đơn ${money(C.INVOICE_REFUSE_FINE, true)}, đóng cùng thuế.</p>` : '<p>Khách lầm bầm rồi bỏ qua. Lần này may mắn.</p>', actions: [{ label: 'Đóng', onClick: closeModal }] });
+    }
   });
   $('#prep-accounts').addEventListener('change', e => {
     if (!e.target.matches('[data-auto-tax]') || !accountantActive()) return;

@@ -5,6 +5,7 @@
 'use strict';
 
 const A = window.ART;
+const P = window.PSCN;   // hình pixel (pixel-scene.js); A chỉ còn dùng cho hằng số và bộ màu tô sáng
 const NS = 'http://www.w3.org/2000/svg';
 const PER_ROW = 3;
 const SX = [140, 380, 620], SY = 658;
@@ -14,7 +15,7 @@ const OWNER_HOME = { x: 630, y: 305 }, OWNER_COOK = { x: 683, y: 305 };
 const OWNER_EXIT = [{ x: 470, y: 318 }, { x: 470, y: 440 }];
 const DELIVER_X = [262, 500, 500];
 const STAFF_HOME = { x: 420, y: 355 };
-const STAFF_LOOK = { ...A.OWNER_LOOK, hair: '#5A3B25', hairStyle: 'bob', shirt: '#F2CB57', trim: '#C9A232', towel: false };
+const STOOL_OF = { '#E2463A': 'R', '#2F6FB3': 'B' };
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -49,7 +50,7 @@ function stepGuests(v, dt) {
   for (const [id,g] of previousGuests) if(!current.has(id)) {
     arrivals.delete(id);
     if(g.c.stole) { addRunner(g.c, g.x, g.y); continue; }
-    if(g.queue||g.visible) { const el=node('g',{'pointer-events':'none',class:'walking sc-departure'}); el.innerHTML='<g transform="scale(.92)">'+A.standingSVG(lookOf(g.c),{mood:'idle'})+'</g>'; Lr.front.prepend(el); departures.push({el,x:g.x,y:g.y,t:0}); }
+    if(g.queue||g.visible) { const el=node('g',{'pointer-events':'none',class:'walking sc-departure'}); el.innerHTML=P.standing(pxLook(g.c),{mood:'idle'}); Lr.front.prepend(el); departures.push({el,x:g.x,y:g.y,t:0}); }
   }
   for(const [id,a] of arrivals) { a.t+=dt; if(!current.get(id)?.queue||a.t>=1.8) { arrivals.delete(id); lastWaitKey=''; } }
   for(let i=departures.length-1;i>=0;i--) { const d=departures[i]; d.t+=dt; const f=clamp(d.t/2,0,1); d.el.setAttribute('transform','translate('+(d.x+(32-d.x)*f)+' '+(d.y+(A.VH+140-d.y)*f)+')'); if(f===1){d.el.remove();departures.splice(i,1);} }
@@ -59,7 +60,7 @@ function placeArrivals(v) {
   v.queue.slice(0,SLOTS.length).forEach((c,k)=>{
     const a=arrivals.get(c.id),e=Lr.wait.querySelector('[data-id="'+c.id+'"]'); if(!a||!e)return;
     const f=clamp(a.t/1.8,0,1),sl=SLOTS[k];
-    e.setAttribute('transform','translate('+(32+(sl.x-32)*f)+' '+(A.VH+120+(sl.y-A.VH-120)*f)+') scale(.92)');
+    e.setAttribute('transform','translate('+(32+(sl.x-32)*f)+' '+(A.VH+120+(sl.y-A.VH-120)*f)+')');
   });
 }
 
@@ -79,15 +80,15 @@ function along(pts, f) {
 let mom = null, runners = [], extraClock = 0;
 const bubbleSVG = (text, y = -168, kind = '') => {
   const w = Math.max(60, [...text].length * 9.5 + 26);
-  return `<g transform="translate(0 ${y})"><rect x="${-w / 2}" y="-19" width="${w}" height="30" rx="15" fill="#FFFDF4"
-    stroke="${kind === 'bad' ? '#C0392B' : '#D9B98A'}" stroke-width="2.5"/><path d="M-6,11 L0,20 L6,11 Z" fill="#FFFDF4"/>
-    <text y="2" text-anchor="middle" font-size="16" font-weight="800" fill="${kind === 'bad' ? '#C0392B' : '#3A2A22'}">${escText(text)}</text></g>`;
+  return `<g transform="translate(0 ${y})" shape-rendering="crispEdges"><rect x="${-w / 2}" y="-19" width="${w}" height="30" fill="#FFF8EC"
+    stroke="${kind === 'bad' ? '#9E3530' : '#2B1D22'}" stroke-width="3"/><rect x="-5" y="11" width="10" height="5" fill="#2B1D22"/><rect x="-2" y="16" width="4" height="4" fill="#2B1D22"/>
+    <text y="3" text-anchor="middle" font-family="VT323, monospace" font-size="21" fill="${kind === 'bad' ? '#9E3530' : '#2B1D22'}">${escText(text)}</text></g>`;
 };
 function momIn(line) {
   if (mom) mom.el.remove();
   const el = node('g', { 'pointer-events': 'none', class: 'walking' });
   Lr.front.prepend(el);
-  mom = { el, x: DOOR.x, y: DOOR.y, to: MOM_SPOT, look: A.makeLook('vanphong', 'f'), line, mood: 'call', key: '' };
+  mom = { el, x: DOOR.x, y: DOOR.y, to: MOM_SPOT, look: { pixel: { hairStyle: 'bun', shirt: 'R', shirtShade: 'E', pants: 'v', pantsShade: 'k', skin: 'I', skinShade: 'f' } }, line, mood: 'call', key: '' };
 }
 function momOut(withKid) {
   if (!mom) return;
@@ -118,7 +119,7 @@ function stepExtras() {
       if (key !== mom.key) {
         mom.key = key;
         mom.el.setAttribute('class', moving ? 'walking' : '');
-        mom.el.innerHTML = `<g transform="scale(.95)">${A.standingSVG(mom.look, { mood: mom.mood })}</g>${moving && mom.to !== DOOR ? '' : bubbleSVG(mom.line)}`;
+        mom.el.innerHTML = `${P.standing(mom.look, { mood: mom.mood === 'call' ? 'angry' : mom.mood })}${moving && mom.to !== DOOR ? '' : bubbleSVG(mom.line)}`;
       }
       mom.el.setAttribute('transform', `translate(${mom.x} ${mom.y})`);
     }
@@ -139,11 +140,10 @@ function stepExtras() {
       r.key = state;
       r.el.setAttribute('class', state === 'caught' ? 'sc-thief' : 'walking sc-thief');
       r.el.setAttribute('pointer-events', state === 'run' ? 'all' : 'none');
-      const icon = c.stole && state === 'run' ? PARTS[c.stole].icon : '';
-      r.el.innerHTML = `<rect x="-40" y="-150" width="80" height="160" fill="transparent"/>
-        <g transform="scale(.92)">${A.standingSVG(lookOf(c), { mood: state === 'run' ? 'focus' : 'sad' })}${maskSVG}
-        ${icon ? `<text y="-40" text-anchor="middle" font-size="30">${icon}</text>` : ''}</g>
-        ${state === 'run' ? bubbleSVG('🦹 Bắt trộm!', -168, 'bad') : state === 'caught' ? bubbleSVG('🙇 Em xin lỗi…') : ''}`;
+      const thief = { pixel: { ...pxLook(c).pixel, hairStyle: 'hood', extras: ['mask'] } };
+      r.el.innerHTML = `<rect x="-50" y="-150" width="100" height="160" fill="transparent"/>
+        ${P.standing(thief, { mood: state === 'run' ? 'shock' : 'sad', carry: c.stole && state === 'run' ? 'box' : null })}
+        ${state === 'run' ? bubbleSVG('Bắt trộm!', -168, 'bad') : state === 'caught' ? bubbleSVG('Em xin lỗi…') : ''}`;
     }
     r.el.setAttribute('transform', `translate(${r.x} ${r.y})`);
   }
@@ -203,18 +203,22 @@ function start({ shopName, prices, staffCount = 0, hot = '', hotName = '', decor
   // khung SVG rộng hơn cảnh (dư hai bên): cắt quầng sáng cho khỏi tràn ra phần dư
   svg.querySelector('defs').insertAdjacentHTML('beforeend', `<clipPath id="cScene"><rect width="${A.VW}" height="${A.VH}"/></clipPath>`);
   Lr.light.setAttribute('clip-path', 'url(#cScene)');
-  Lr.wall.innerHTML = A.wallSVG(prices, { tv: true }) + A.neonGameSVG(false) + A.fairyLightsSVG(false) + DECOR.wallSVG(decor) + TV.frameSVG();
+  Lr.wall.innerHTML = P.background() + P.priceBoard(prices) + P.clock() + P.wallSigns() + P.decor(decor) + TV.frameSVG();
   // biển tên quán vẽ lại trên lớp tối (chỉ đúng khung biển) để neon luôn sáng rõ; màn TV cũng tự phát sáng
-  Lr.sign.innerHTML = `<clipPath id="cSign"><rect x="194" y="6" width="372" height="58" rx="7"/></clipPath>
-    <g clip-path="url(#cSign)">${A.awningSVG(shopName)}</g>${TV.screenSVG(hot, hotName)}`;
-  Lr.counter.innerHTML = `<g transform="translate(-316 -19) scale(.75)">${A.counterSVG()}
-    <g data-gamble-sign="" display="none" transform="translate(1194 412)"><rect width="224" height="36" rx="3" fill="#FFFDF4" stroke="#A83226" stroke-width="3"/><text x="112" y="25" text-anchor="middle" font-size="22" font-weight="bold" fill="#A83226">CẤM CỜ BẠC</text></g></g>`;
-  Lr.front.innerHTML = `<g class="dog-spot" data-hit="dog"></g>` + A.frameSVG() + A.awningSVG(shopName);
+  Lr.sign.innerHTML = `<clipPath id="cSign"><rect x="185" y="2" width="390" height="65"/></clipPath>
+    <g clip-path="url(#cSign)">${P.awning(shopName)}</g>${TV.screenSVG(hot, hotName)}`;
+  Lr.counter.innerHTML = `${P.counter()}
+    <g data-gamble-sign="" display="none" transform="translate(574 300)"><rect width="150" height="26" fill="#FFF8EC" stroke="#9E3530" stroke-width="3"/><text x="75" y="20" text-anchor="middle" font-family="VT323, monospace" font-size="21" fill="#9E3530">CẤM CỜ BẠC</text></g>`;
+  Lr.front.innerHTML = `<g class="dog-spot" data-hit="dog"></g>` + P.frame() + P.awning(shopName);
   Lr.night.innerHTML = `<rect class="ov-dusk" width="${A.VW}" height="${A.VH}" fill="#FFA464" opacity="0"/>
     <rect class="ov-night" width="${A.VW}" height="${A.VH}" fill="#244454" opacity="0"/>
     <rect class="ov-vig" width="${A.VW}" height="${A.VH}" fill="url(#gVig)" opacity="0"/>
     <rect class="ov-dark" width="${A.VW}" height="${A.VH}" fill="#1B1426" opacity="0"/>`;
-  Lr.light.innerHTML = A.lightsSVG(SX) + `<g class="lt-tv">${TV.glowSVG(hot)}</g><g class="lt-glows"></g>`;
+  // đèn vector cũ có neon/dây đèn kiểu vẽ tay: bỏ phần đó, thay quầng neon vuông khớp biển GAME pixel
+  const lights = A.lightsSVG(SX), neonAt = lights.indexOf('<g class="lt-neon">');
+  Lr.light.innerHTML = (neonAt < 0 ? lights : lights.slice(0, neonAt)) + `<g class="lt-neon"><rect x="176" y="56" width="112" height="82" fill="#F29BB8" opacity=".55"/></g>`
+    + `<g class="lt-tv">${TV.glowSVG(hot)}</g><g class="lt-glows"></g>`;
+  Lr.light.querySelector('.lt-sun')?.remove();
   slots = SX.map((x, k) => {
     const g = node('g', { transform: `translate(${x} ${SY})`, class: 'sc-st', 'data-hit': 'pc', 'data-slot': k });
     const glow = node('g', { transform: `translate(${x} ${SY})` });
@@ -261,8 +265,8 @@ function say(x, y, text, kind = '') {
   const w = Math.max(40, text.length * fs * .55 + 22);
   const g = node('g', { transform: `translate(${x} ${y})` });
   g.innerHTML = `<g class="sc-float">
-    ${big ? '' : `<rect x="${-w / 2}" y="${-fs - 6}" width="${w}" height="${fs + 16}" rx="${(fs + 16) / 2}" fill="#FFFDF4" stroke="#D9B98A" stroke-width="2"/>`}
-    <text class="${big ? 'baloo' : ''}" y="${big ? 0 : 1}" text-anchor="middle" font-size="${fs}" font-weight="800"
+    ${big ? '' : `<rect x="${-w / 2}" y="${-fs - 6}" width="${w}" height="${fs + 16}" fill="#FFF8EC" stroke="#2B1D22" stroke-width="3" shape-rendering="crispEdges"/>`}
+    <text font-family="VT323, monospace" y="${big ? 0 : 3}" text-anchor="middle" font-size="${big ? 34 : 22}"
       fill="${colors[kind] || '#3A2A22'}" ${big ? 'stroke="#FFFDF4" stroke-width="5" paint-order="stroke"' : ''}>${escText(text)}</text></g>`;
   Lr.ui.appendChild(g);
   setTimeout(() => g.remove(), 1700);
@@ -308,12 +312,12 @@ function actTick(pc, c, f, dt, k) {
   if (k == null) return;
   const x = SX[k];
   if (f.flair === 'win') {
-    say(x, SY - 318, 'VICTORY!', 'gold');
-    setTimeout(() => say(x + 40, SY - 282, pick(WIN_LINES)), 500);
+    say(x, SY - 210, 'VICTORY!', 'gold');
+    setTimeout(() => say(x + 40, SY - 180, pick(WIN_LINES)), 500);
   } else {
     // thua thì liếc sang máy bên cạnh
     f.look2 = k === 2 ? -3 : 3;
-    setTimeout(() => say(x + 40, SY - 282, pc.m.mouse === 0 && Math.random() < .5 ? 'Chuột quán đơ quá!' : pick(LOSE_LINES), 'soft'), 500);
+    setTimeout(() => say(x + 40, SY - 180, pc.m.mouse === 0 && Math.random() < .5 ? 'Chuột quán đơ quá!' : pick(LOSE_LINES), 'soft'), 500);
   }
 }
 
@@ -341,10 +345,10 @@ function renderSlot(s, pc, v) {
   const key = [pc.i, JSON.stringify(pc.m), c ? c.id : 0, pose, f ? f.look2 : 0, item, pc.dirty && !c, pc.broken].join('|');
   if (key !== s.key || justSat) {
     s.key = key;
-    const cust = c ? { look: lookOf(c), pose, look2: pose === 'lose' || pose === 'wait' ? (pose === 'wait' ? 3 : f.look2) : 0, justSat } : null;
+    const cust = c ? { look: pxLook(c), pose: c.sat < 40 && pose === 'play' ? 'lag' : pose, justSat } : null;
     const stObj = { i: pc.i, m: pc.m, cust, item, trash: !c && pc.dirty };
-    s.g.innerHTML = `<g data-slot="${s.k}">${A.stationSVG(stObj)}</g>`;
-    s.glow.innerHTML = A.stationGlowSVG(stObj);
+    s.g.innerHTML = `<g data-slot="${s.k}">${P.station(stObj)}</g>`;
+    s.glow.innerHTML = P.stationGlow(stObj);
   }
   // Lớp giao diện: vòng chọn máy, bong bóng, thanh giờ
   const o = c && c.order;
@@ -361,43 +365,27 @@ function renderSlot(s, pc, v) {
       h += `<ellipse class="sc-ring" cy="-2" rx="${w + (picked ? 30 : 24)}" ry="${picked ? 18 : 15}" fill="${picked ? '#5FF2DC33' : 'none'}"
         stroke="${col}" stroke-width="${picked ? 6 : 4}" ${fit === 'good' ? '' : 'stroke-dasharray="10 7"'}/>`;
     }
-    if (c && !c.awaitingLoad) h += `<g transform="translate(${-w + 26} -83)"><rect width="56" height="6" rx="3" fill="#00000030"/><rect class="tbar" width="56" height="6" rx="3" fill="#1FA89A"/></g>`;
+    if (c && !c.awaitingLoad) h += `<g transform="translate(-30 8)" shape-rendering="crispEdges"><rect width="60" height="6" fill="#3A2A2E"/><rect class="tbar" width="60" height="6" fill="#2E9C8A"/></g>`;
+    // bong bóng pixel phía trên đầu khách (giữ data-hit để bấm như cũ)
+    const bub = (x, y, hit, icons, opt) => `<g transform="translate(${x} ${y})" data-slot="${s.k}" data-hit="${hit}"><g class="sc-bubble ${opt?.cls || ''}">${P.bubble(icons, opt)}</g></g>`;
     if (pc.broken) {
-      h += `<g transform="translate(50 -268)" data-slot="${s.k}" data-hit="pc"><g class="sc-bubble">
-        <circle r="26" fill="#FFF1EE" stroke="#C0392B" stroke-width="3"/><text y="9" text-anchor="middle" font-size="26">${pc.repair > 0 ? '🔧' : '💥'}</text>
-        ${pc.repair > 0 ? `<rect x="-24" y="32" width="48" height="6" rx="3" fill="#00000025"/><rect class="rbar" x="-24" y="32" width="0" height="6" rx="3" fill="#2E9E5B"/>` : ''}</g></g>`;
+      h += bub(60, -174, 'pc', [pc.repair > 0 ? 'tool' : 'bolt'], { border: 'E', fill: 'z' });
+      if (pc.repair > 0) h += `<g transform="translate(36 -170)" shape-rendering="crispEdges"><rect width="48" height="6" fill="#3A2A2E"/><rect class="rbar" width="0" height="6" fill="#2E9C8A"/></g>`;
     } else if (c?.awaitingLoad) {
-      h += `<g transform="translate(52 -266)" data-slot="${s.k}" data-hit="bubble"><g class="sc-bubble">
-        <circle r="27" fill="#FFFDF4" stroke="#1FA89A" stroke-width="3"/><text y="9" text-anchor="middle" font-size="26">⏱️</text>
-      </g></g>`;
+      h += bub(60, -174, 'bubble', ['clock'], { border: 'J' });
     } else if (o) {
-      const txt = shy === 'shy' ? '💭' : items;
-      const bw = Math.max(58, [...txt].length * 13 + 26);
-      h += `<g transform="translate(52 -266)" data-slot="${s.k}" data-hit="bubble"><g class="sc-bubble ${shy}">
-        <path d="M${-bw / 2 + 8},-54 H${bw / 2 - 8} Q${bw / 2},-54 ${bw / 2},-46 V-12 Q${bw / 2},-4 ${bw / 2 - 8},-4 H-8 L-20,8 L-18,-4 H${-bw / 2 + 8} Q${-bw / 2},-4 ${-bw / 2},-12 V-46 Q${-bw / 2},-54 ${-bw / 2 + 8},-54 Z"
-          fill="#FFFDF4" stroke="#D9B98A" stroke-width="3"/>
-        <text y="-21" text-anchor="middle" font-size="24">${txt}</text>
-        ${shy ? '' : `<rect x="${-bw / 2 + 10}" y="-13" width="${bw - 20}" height="5" rx="2.5" fill="#00000018"/><rect class="obar" x="${-bw / 2 + 10}" y="-13" width="${bw - 20}" height="5" rx="2.5" fill="#2E9E5B"/>`}
-      </g></g>`;
+      const names = shy === 'shy' ? ['chat'] : Object.entries(o.items).flatMap(([k, n]) => Array(n).fill(window.PXUI.MAP[ITEMS[k].icon] || 'noodle'));
+      h += bub(60, -174, 'bubble', names, { bar: !shy, cls: shy });
     } else if (c?.noisy) {
-      h += `<g transform="translate(52 -266)" data-slot="${s.k}" data-hit="pc"><g class="sc-bubble">
-        <circle r="27" fill="#FFF1EE" stroke="#E0A11B" stroke-width="3"/><text y="9" text-anchor="middle" font-size="26">📢</text>
-      </g></g>`;
+      h += bub(60, -174, 'pc', ['megaphone'], { border: 'O' });
     } else if (c?.shifty) {
-      h += `<g transform="translate(52 -266)" data-slot="${s.k}" data-hit="pc"><g class="sc-bubble">
-        <circle r="24" fill="#FFFDF4" stroke="#8A7360" stroke-width="3"/><text y="8" text-anchor="middle" font-size="24">👀</text>
-      </g></g>`;
+      h += bub(60, -174, 'pc', ['eye'], { border: 'L' });
     } else if (pc.alarm) {
-      h += `<g transform="translate(0 -230)" data-slot="${s.k}" data-hit="pc"><g class="sc-bubble">
-        <circle r="34" fill="#FFE1DC" stroke="#C0392B" stroke-width="4"/><text y="11" text-anchor="middle" font-size="32">🦹</text>
-      </g></g>`;
+      h += bub(0, -174, 'pc', ['thief'], { border: 'E', fill: 'y' });
     } else if (!c && pc.m.missing) {
-      h += `<g transform="translate(0 -230)" data-slot="${s.k}" data-hit="pc"><g class="sc-bubble">
-        <circle r="22" fill="#F3EFE6" stroke="#8A7360" stroke-width="3" stroke-dasharray="6 4"/><text y="8" text-anchor="middle" font-size="22">❓</text>
-      </g></g>`;
+      h += bub(0, -174, 'pc', ['warn'], { border: 'L' });
     } else if (!c && pc.dirty) {
-      h += `<g transform="translate(-60 -158)" data-slot="${s.k}" data-hit="pc"><g class="sc-bubble"><circle r="20" fill="#FFFDF4" stroke="#D9B98A" stroke-width="3"/>
-        <text y="7" text-anchor="middle" font-size="20">🧹</text></g></g>`;
+      h += bub(-56, -70, 'pc', ['broom']);
     }
     s.ui.innerHTML = h;
     s.tbar = s.ui.querySelector('.tbar');
@@ -406,20 +394,19 @@ function renderSlot(s, pc, v) {
     s.obarW = s.obar ? +s.obar.getAttribute('width') : 0;
   }
   // thanh đo cập nhật từng khung hình, không vẽ lại cả cụm
-  if (s.tbar) {
-    const f2 = clamp(c.remaining / c.loaded, 0, 1);
-    s.tbar.setAttribute('width', (56 * f2).toFixed(1));
-    s.tbar.setAttribute('fill', f2 < .15 ? '#E0A11B' : '#1FA89A');
-  }
+  if (s.tbar) s.tbar.setAttribute('fill', c.remaining / c.loaded < .15 ? '#F6CB55' : '#2E9C8A');
   if (s.obar && o) {
     const f2 = clamp(o.patience / o.patienceMax, 0, 1);
     s.obar.setAttribute('width', (s.obarW * f2).toFixed(1));
     s.obar.setAttribute('fill', f2 < .3 ? '#C0392B' : '#2E9E5B');
   }
   if (s.rbar) s.rbar.setAttribute('width', (48 * clamp(1 - pc.repair / v.repairSeconds, 0, 1)).toFixed(1));
+  if (s.tbar) s.tbar.setAttribute('width', (60 * clamp(c.remaining / c.loaded, 0, 1)).toFixed(1));
 }
 
 const lookOf = c => (c.look = c.look || A.makeLook(c.seg, c.gender));
+// look pixel suy từ look của khách (màu gần nhất trong bảng màu chung), nhớ lại trên khách
+const pxLook = c => (c.pxLook = c.pxLook || { pixel: P.fromLook(lookOf(c), c.seg) });
 
 // ---------- Góc chờ ----------
 function renderWaiting(v) {
@@ -430,19 +417,18 @@ function renderWaiting(v) {
   lastWaitKey = key;
   let h = '';
   SLOTS.forEach((sl, k) => {
-    if (sl.stool) h += `<g transform="translate(${sl.x} ${sl.y})">${A.stoolSVG(sl.stool)}</g>`;
     const c = q[k];
-    if (!c) return;
+    if (!c) { if (sl.stool) h += `<g transform="translate(${sl.x} ${sl.y})">${P.stool(STOOL_OF[sl.stool])}</g>`; return; }
     const low = c.patience / c.patienceMax < .3;
     const mood = c.lost ? 'hungry' : low ? 'sad' : v.selected === c ? 'smile' : 'idle';
     if (v.selected === c) h += `<ellipse class="sc-ring" cx="${sl.x}" cy="${sl.y}" rx="36" ry="11" fill="#5FF2DC33" stroke="#1FA89A" stroke-width="5"/>`;
-    h += `<g transform="translate(${sl.x} ${sl.y}) scale(.92)" data-hit="cust" data-id="${c.id}" class="sc-cust ${arrivals.has(c.id) ? 'walking' : ''}">
-      <g class="sc-pop">${A.standingSVG(lookOf(c), { stool: !!sl.stool && !arrivals.has(c.id), mood })}</g></g>`;
-    if (c.lost) h += `<g transform="translate(${sl.x + 26} ${sl.y - 150})"><circle r="15" fill="#FFFDF4" stroke="#D9B98A" stroke-width="2.5"/><text y="6" text-anchor="middle" font-size="18" font-weight="800" fill="#C0392B">?</text></g>`;
+    const sit = !!sl.stool && !arrivals.has(c.id);
+    h += `<g transform="translate(${sl.x} ${sl.y})" data-hit="cust" data-id="${c.id}" class="sc-cust ${arrivals.has(c.id) ? 'walking' : ''}">
+      <g class="sc-pop">${P.standing(pxLook(c), { stool: sit ? STOOL_OF[sl.stool] : null, mood, emote: c.lost ? 'shock' : low ? 'wait' : null })}</g></g>`;
   });
   if (q.length > SLOTS.length) {
-    h += `<g transform="translate(236 470)"><rect x="-30" y="-16" width="60" height="30" rx="15" fill="#F07A5A"/>
-      <text y="6" text-anchor="middle" font-size="16" font-weight="800" fill="#fff">+${q.length - SLOTS.length}</text></g>`;
+    h += `<g transform="translate(236 470)" shape-rendering="crispEdges"><rect x="-30" y="-16" width="60" height="30" fill="#C8693F" stroke="#2B1D22" stroke-width="3"/>
+      <text y="8" text-anchor="middle" font-family="VT323, monospace" font-size="24" fill="#FFF8EC">+${q.length - SLOTS.length}</text></g>`;
   }
   Lr.wait.innerHTML = h;
 }
@@ -470,8 +456,7 @@ function renderOwner(v) {
   if (key !== owner.key) {
     owner.key = key;
     owner.el.classList.toggle('walking', walking);
-    owner.el.innerHTML = `<g transform="scale(.82)">${A.standingSVG(A.OWNER_LOOK, {
-      owner: true, carry: owner.carry, pose: cooking ? 'cook' : 'stand', mood: cooking ? 'focus' : 'smile' })}</g>`;
+    owner.el.innerHTML = P.standing({ pixel: P.OWNER }, { carry: owner.carry, mood: cooking ? 'focus' : 'smile' });
     const flame = svg.querySelector('#flame'), steam = svg.querySelector('#potSteam');
     if (flame) flame.classList.toggle('on', cooking);
     if (steam) steam.classList.toggle('strong', cooking);
@@ -535,7 +520,7 @@ function renderStaff() {
   if (key !== staff.key) {
     staff.key = key;
     staff.el.classList.toggle('walking', walking);
-    staff.el.innerHTML = `<g transform="scale(.75)">${A.standingSVG(STAFF_LOOK, { carry: staff.carry, mood: 'smile' })}</g>`;
+    staff.el.innerHTML = P.standing({ pixel: P.STAFF }, { carry: staff.carry, mood: 'smile' });
   }
   staff.el.setAttribute('transform', `translate(${staff.x.toFixed(1)} ${staff.y.toFixed(1)})`);
 }
@@ -619,7 +604,7 @@ function frame(v, dt) {
   const dk = dog.awake > 0 ? 'awake' : 'sleep';
   if (dk !== dog.key) {
     dog.key = dk;
-    svg.querySelector('.dog-spot').innerHTML = `<g transform="translate(58 ${A.VH - 12}) scale(.62)">${A.dogSVG(dog.awake > 0)}</g>`;
+    svg.querySelector('.dog-spot').innerHTML = `<g transform="translate(70 ${A.VH - 12})">${P.dog(dog.awake > 0)}</g>`;
   }
 }
 

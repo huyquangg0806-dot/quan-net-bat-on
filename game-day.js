@@ -164,7 +164,7 @@ function updateRating(sat, weight) {
 
 // ---------- Nạp giờ (xếp khách vào máy) ----------
 // Mặt chibi của khách (dùng ở quầy nạp giờ và bếp)
-const faceSVG = (c, mood = 'smile') =>
+const faceSVG = (c, mood = 'smile') => window.PSCN ? PSCN.portrait(c.pxLook || (c.pxLook = { pixel: PSCN.fromLook(c.look, c.seg) }), mood) :
   `<svg class="face" viewBox="-42 -54 84 90" aria-hidden="true"><circle cy="-4" r="40" fill="#F6EBD4"/>${ART.headSVG(c.look, mood)}${c.look.headset ? ART.headsetSVG(c.look) : ''}</svg>`;
 
 // Máy nên gợi ý cho khách: trống, sạch, đủ hạng mà không dư nhiều nhất
@@ -568,7 +568,7 @@ function stockBtn(k, label, disabled) {
   const n = invCount(k), bad = expiredCount(k);
   // lấy hàng cũ trước: nếu còn hàng hết date thì món tiếp theo là đồ hết date
   return `<button class="stock-btn ${bad ? 'next-expired' : ''}" data-add="${k}" ${disabled || !n ? 'disabled' : ''}>
-    <span class="si">${ART.itemSVG(k)}</span>${label || ITEMS[k].name}<small>${n ? 'còn ' + n : 'hết hàng'}</small>
+    <span class="si">${PSCN.itemIcon(ITEMS[k].icon, 2)}</span>${label || ITEMS[k].name}<small>${n ? 'còn ' + n : 'hết hàng'}</small>
     ${bad ? `<small class="bad-text">☠️ ${bad} hết date</small>` : ''}</button>`;
 }
 
@@ -729,8 +729,9 @@ function deliver(pc) {
   let pay = 0;
   const notes = [];
   for (const k of new Set([...Object.keys(o.items), ...Object.keys(o.actualItems || o.items), ...Object.keys(t.items)])) {
-    const need = o.items[k] || 0, got = t.items[k] || 0;
-    pay += Math.min((o.actualItems || o.items)[k] || 0, got) * ITEMS[k].price;
+    const need = o.items[k] || 0, got = t.items[k] || 0, charged = Math.min((o.actualItems || o.items)[k] || 0, got);
+    pay += charged * ITEMS[k].price;
+    if (charged) (c.bought = c.bought || {})[k] = (c.bought[k] || 0) + charged;   // ghi phiếu tính tiền, để lập hóa đơn nếu khách xin
     // khách ăn/uống món hết date → có thể đau bụng một lúc sau (khách không biết ngay)
     const bad = (t.bad[k] || []).slice(0, Math.min(need, got));
     if (bad.some(past => Math.random() < C.SICK_CHANCE[Math.min(past, C.SICK_CHANCE.length - 1)]) && c.sickAt == null) {
@@ -767,7 +768,9 @@ function deliver(pc) {
   c.ate = true;
   c.ateMi = c.ateMi || !!t.items.mi;
   c.hadCoffee = c.hadCoffee || !!t.items.caphe;
+  const basePay = pay;
   if (cardFx('food')) pay = round500(pay * (1 + cardFx('food')));   // thẻ Ngon miệng trên kệ
+  c.foodExtra = (c.foodExtra || 0) + pay - basePay;
   S.money += pay;
   R.led.food += pay;
   fx(pc.el.root, `+${money(pay)}`, 'money');
@@ -918,6 +921,7 @@ function leave(pc, reason) {
     if (refund) {
       S.money -= refund;
       R.led.closeRefund += refund;
+      c.refunded = (c.refunded || 0) + refund;
       fx(pc.el.root, `↩️ Hoàn ${money(refund)}`, 'warn');
     }
     if (c.remaining > 0.25) hit(c, 'closed', -Math.min(C.CLOSE_HIT_MAX, c.remaining * C.CLOSE_HIT_PER_HOUR), 'hours',
@@ -936,6 +940,7 @@ function leave(pc, reason) {
     const refund = round500(c.remaining * payRate(pc, c));
     S.money -= refund;
     R.led.refund += refund;
+    c.refunded = (c.refunded || 0) + refund;
     log(`💸 ${c.name} đòi lại ${money(refund)} tiền giờ chưa chơi`);
   }
   if (acRunning() && R.temp < 29 && !c.ev.hot) note(c, 'ac', 3, 'Quán mát rượi');
@@ -962,6 +967,7 @@ function leave(pc, reason) {
   else if (reason === 'done') log(`${face} ${c.name} chơi xong, rời máy ${pc.i + 1}`);
   if (sickAtHome) log(`🤢 ${c.name} về tới nhà thì đau bụng…`);
   if (reported) log(`📞 ${c.name} gọi báo công an phường!`);
+  askInvoice(c, pc, reason);
   const rv = finishVisit(c, pc.i + 1, reason === 'rage' || c.sick ? 1 : reason === 'kicked' ? pick([1, 2]) : 0);
   if (rv) fx(pc.el.root, `📍 ${rv.stars}★`, rv.stars >= 4 ? 'good' : rv.stars <= 2 ? 'bad' : 'warn', 700);
   if (rv && rv.stars >= 4) setTimeout(() => VFX.burst(pc.el.root, rv.stars === 5 ? 'stars' : 'sparkle'), 700);
@@ -1280,7 +1286,7 @@ function buildFloor() {
     staffCount: S.staff.length,
     hot: S.hot, hotName: GAMES[S.hot].name,   // TV treo tường chiếu game đang hot
     // đồ đạc theo nâng cấp: quạt/máy lạnh, router + dây mạng, ổ điện/UPS
-    decor: { ac: !!S.upgrades.ac, inverter: !!S.upgrades.inverter, ups: !!S.upgrades.ups, net: NET_PLANS.findIndex(p => p.id === S.net) },
+    decor: decorOf(),
     prices: [
       ['Thường', k(TIERS[1].rate) + '/h'], ['Pre', k(TIERS[2].rate) + '/h'], ['VIP', k(TIERS[3].rate) + '/h', '#FFD66B'],
       ['Mì trứng', k(ITEMS.mi.price + ITEMS.trung.price), '#FFB199'],

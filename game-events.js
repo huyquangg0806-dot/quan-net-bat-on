@@ -158,6 +158,7 @@ function kickNoisy(pc) {
   const refund = round500(Math.max(0, c.remaining) * payRate(pc, c));
   S.money -= refund;
   R.led.refund += refund;
+  c.refunded = (c.refunded || 0) + refund;
   R.led.kicked++;
   log(`🚪 Mời ${c.name} về vì làm ồn${refund ? `, trả lại ${money(refund)} tiền giờ` : ''}`);
   for (const nb of neighbors(pc)) {

@@ -466,6 +466,7 @@ function buyUpgrade(id) {
   if (!u || !upgradeState(u).ok) return;
   S.money -= u.cost;
   recordBook('investment', u.cost);
+  post('PC', id.startsWith('unlock:') ? `Mua dụng cụ để bán ${ITEMS[id.slice(7)].name}` : `Mua sắm ${u.name}`, [[id === 'shelf' ? '2118' : '2112', '1111', u.cost]]);
   if (id.startsWith('unlock:')) S.unlocked[id.slice(7)] = true;
   else S.upgrades[id] = true;
   SFX.play('levelUp');
